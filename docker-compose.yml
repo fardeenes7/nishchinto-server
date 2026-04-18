@@ -91,6 +91,33 @@ services:
       - rabbitmq
       - redis
 
+  traefik:
+    image: traefik:v2.10
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+
+  storefront:
+    image: node:20-alpine
+    working_dir: /app
+    # In production this would be a built Next.js container, but for dev we can just run via pnpm
+    # Assuming turborepo runs on port 3001 per previous configs
+    command: sh -c "cd client && corepack enable && pnpm install && pnpm turbo run dev --filter=storefront..."
+    volumes:
+      - ../:/app
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.storefront.rule=HostRegexp(`^{subdomain:[a-z0-9-]+}.nishchinto.com.bd`)"
+      - "traefik.http.routers.storefront.entrypoints=web"
+      - "traefik.http.services.storefront.loadbalancer.server.port=3001"
+
 volumes:
   postgres_data:
   redis_data:

@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     'core',
     'users',
     'shops',
+    'marketing',
 ]
 
 MIDDLEWARE = [
@@ -144,3 +145,9 @@ DEFAULT_FROM_EMAIL = '"Nishchinto" <noreply@nishchinto.com.bd>'
 
 # CORS Configuration
 CORS_ALLOW_ALL_ORIGINS = True # For dev, restrict in prod
+
+# Subdomain Routing Security
+SUBDOMAIN_BLACKLIST = {
+    'admin', 'api', 'app', 'auth', 'mail', 'www', 'help', 'static', 'media', 'public',
+    'support', 'dashboard', 'nishchinto', 'checkout', 'pay', 'billing', 'docs'
+}
