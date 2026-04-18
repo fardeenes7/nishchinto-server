@@ -1,11 +1,11 @@
 from django.db import models
-import uuid
 
 class WaitlistEntry(models.Model):
     STATUS_CHOICES = (
         ('PENDING', 'Pending'),
         ('APPROVED', 'Approved'),
         ('REJECTED', 'Rejected'),
+        ('CLAIMED', 'Claimed'),
     )
 
     email = models.EmailField(unique=True, db_index=True)

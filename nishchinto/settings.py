@@ -3,9 +3,22 @@ import environ
 from pathlib import Path
 from datetime import timedelta
 
+import sentry_sdk
+from sentry_sdk.integrations.django import DjangoIntegration
+
 env = environ.Env(
     DEBUG=(bool, False)
 )
+
+# Sentry Initialization
+SENTRY_DSN = env('SENTRY_DSN', default=None)
+if SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        integrations=[DjangoIntegration()],
+        traces_sample_rate=1.0,
+        send_default_pii=True
+    )
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -22,12 +35,21 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.sites',
     
     # Third party
     'rest_framework',
+    'rest_framework.authtoken',
     'rest_framework_simplejwt',
     'corsheaders',
     'drf_spectacular',
+    
+    # Auth & Social
+    'dj_rest_auth',
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    'allauth.socialaccount.providers.google',
     
     # Local
     'core',
@@ -35,6 +57,8 @@ INSTALLED_APPS = [
     'shops',
     'marketing',
 ]
+
+SITE_ID = 1
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',

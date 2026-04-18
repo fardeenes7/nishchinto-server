@@ -5,6 +5,7 @@ from rest_framework import status
 from marketing.models import WaitlistEntry
 from marketing.serializers import WaitlistEntrySerializer
 from .throttles import WaitlistRedisThrottle
+from marketing.tasks import send_waitlist_invite_email
 import uuid
 
 class WaitlistCreateView(generics.CreateAPIView):
@@ -30,6 +31,7 @@ class AdminWaitlistApproveView(generics.GenericAPIView):
     Admin action to approve a waiting user and generate an invite link.
     """
     queryset = WaitlistEntry.objects.all()
+    # In Django REST Framework, IsAdminUser natively checks `is_staff=True`, perfectly matching our strict rules!
     permission_classes = [IsAdminUser]
 
     def post(self, request, pk, *args, **kwargs):
@@ -42,7 +44,8 @@ class AdminWaitlistApproveView(generics.GenericAPIView):
         entry.invite_token = uuid.uuid4()
         entry.save()
         
-        # Here we would dispatch Celery send_invite_email_task(entry.email, entry.invite_token)
+        # Dispatch Celery task to send invite
+        send_waitlist_invite_email.delay(entry.email, str(entry.invite_token))
         
         return Response({'detail': 'Approved successfully', 'token': entry.invite_token})
 

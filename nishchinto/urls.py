@@ -8,8 +8,11 @@ from rest_framework_simplejwt.views import (
 # Optional drf-spectacular integration for API Schema
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
+from users.api.sso_views import SSOHubView
+
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('sso/hub/', SSOHubView.as_view(), name='sso_hub'),
 
     # Global Auth Token endpoints
     path('api/v1/auth/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
@@ -22,6 +25,6 @@ urlpatterns = [
     
     # App-specific endpoints (to be created)
     path('api/v1/marketing/', include('marketing.api.urls')),
+    path('api/v1/shops/', include('shops.api.urls')),
     # path('api/v1/users/', include('users.api.urls')),
-    # path('api/v1/shops/', include('shops.api.urls')),
 ]
