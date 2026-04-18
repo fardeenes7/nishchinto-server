@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django.contrib.sites',
+    'django.contrib.postgres',
     
     # Third party
     'rest_framework',
@@ -51,11 +52,19 @@ INSTALLED_APPS = [
     'allauth.socialaccount',
     'allauth.socialaccount.providers.google',
     
+    # Celery Beat
+    'django_celery_beat',
+    
+    # Third-party filters
+    'django_filters',
+
     # Local
     'core',
     'users',
     'shops',
     'marketing',
+    'media.apps.MediaConfig',
+    'catalog',
 ]
 
 SITE_ID = 1
@@ -121,7 +130,24 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 MEDIA_URL = 'media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+MEDIA_ROOT = os.path.join(BASE_DIR, 'mediafiles')
+
+# ─── S3 / MinIO Media Storage ───────────────────────────────────────────────
+# Use AWS_S3_ENDPOINT_URL to switch between local MinIO and real S3:
+#   Dev:  AWS_S3_ENDPOINT_URL=http://localhost:9000
+#   Prod: leave AWS_S3_ENDPOINT_URL unset (points to real AWS S3)
+AWS_ACCESS_KEY_ID = env('AWS_ACCESS_KEY_ID', default='nishchinto_minio')
+AWS_SECRET_ACCESS_KEY = env('AWS_SECRET_ACCESS_KEY', default='nishchinto_minio_secret')
+AWS_STORAGE_BUCKET_NAME = env('AWS_STORAGE_BUCKET_NAME', default='nishchinto-media')
+AWS_S3_REGION_NAME = env('AWS_S3_REGION_NAME', default='us-east-1')
+AWS_S3_ENDPOINT_URL = env('AWS_S3_ENDPOINT_URL', default='')
+AWS_S3_OBJECT_PARAMETERS = {'CacheControl': 'max-age=86400, public'}
+AWS_QUERYSTRING_AUTH = False  # CDN-served URLs should be public
+AWS_S3_FILE_OVERWRITE = True   # We overwrite on WebP conversion
+CDN_BASE_URL = env('CDN_BASE_URL', default='')
+
+# Use S3 for media storage; static files remain local in dev
+DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
@@ -157,6 +183,20 @@ CELERY_RESULT_BACKEND = env('REDIS_URL', default='redis://localhost:6379/0')
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
+
+# Celery Beat Schedule — Periodic Tasks
+CELERY_BEAT_SCHEDULE = {
+    'purge-orphaned-media-daily': {
+        'task': 'media.tasks.cleanup.purge_orphaned_media',
+        'schedule': 60 * 60 * 24,  # Every 24 hours
+        'options': {'queue': 'default'},
+    },
+    'auto-publish-scheduled-products': {
+        'task': 'catalog.tasks.auto_publish_scheduled',
+        'schedule': 60 * 5,  # Every 5 minutes
+        'options': {'queue': 'default'},
+    },
+}
 CELERY_TIMEZONE = TIME_ZONE
 
 # Email Configuration

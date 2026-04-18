@@ -9,6 +9,7 @@ from rest_framework_simplejwt.views import (
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
 from users.api.sso_views import SSOHubView
+from catalog.api.urls import storefront_urlpatterns
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -23,8 +24,11 @@ urlpatterns = [
     path('api/schema/swagger-ui/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path('api/schema/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
     
-    # App-specific endpoints (to be created)
+    # App-specific endpoints
     path('api/v1/marketing/', include('marketing.api.urls')),
     path('api/v1/shops/', include('shops.api.urls')),
+    path('api/v1/catalog/', include('catalog.api.urls')),
+    path('api/v1/storefront/', include(storefront_urlpatterns)),
+    path('api/v1/media/', include('media.api.urls')),
     # path('api/v1/users/', include('users.api.urls')),
 ]

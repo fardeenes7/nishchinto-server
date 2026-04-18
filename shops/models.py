@@ -18,6 +18,7 @@ class SubscriptionPlan(models.Model):
     max_staff = models.IntegerField(default=1)
     can_use_pos = models.BooleanField(default=False)
     can_use_api = models.BooleanField(default=False)
+    can_use_pixels = models.BooleanField(default=False)  # Free plan cannot configure tracking pixels
     
     def __str__(self):
         return self.get_name_display()
@@ -36,6 +37,12 @@ class Shop(SoftDeleteModel):
     override_max_products = models.IntegerField(null=True, blank=True)
     override_max_staff = models.IntegerField(null=True, blank=True)
     is_billing_exempt = models.BooleanField(default=False)
+
+    # Packaging weight added to all orders for courier tier calculation
+    packaging_weight_grams = models.PositiveIntegerField(
+        default=0,
+        help_text="Added to every order's total weight for accurate courier billing",
+    )
     
     def __str__(self):
         return self.name
