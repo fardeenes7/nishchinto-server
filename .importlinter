@@ -1,0 +1,18 @@
+[importlinter]
+root_package = nishchinto
+
+[importlinter:contract:1]
+name = Enforce modular boundaries (Users should not depend on Shops logic)
+type = independence
+modules =
+    users
+    shops
+
+[importlinter:contract:2]
+name = Selectors cannot perform writes (Service Dependency)
+type = layers
+layers =
+    users.api
+    users.services
+    users.selectors
+    users.models

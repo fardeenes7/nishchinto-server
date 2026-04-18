@@ -1,0 +1,96 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: nishchinto
+      POSTGRES_PASSWORD: nishchinto_password
+      POSTGRES_DB: nishchinto
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nishchinto"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  pgbouncer:
+    image: edoburu/pgbouncer:late
+    environment:
+      DB_HOST: db
+      DB_USER: nishchinto
+      DB_PASSWORD: nishchinto_password
+      DB_NAME: nishchinto
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 500
+      DEFAULT_POOL_SIZE: 20
+    ports:
+      - "6432:5432"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: nishchinto
+      RABBITMQ_DEFAULT_PASS: nishchinto_password
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  api:
+    build: .
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgres://nishchinto:nishchinto_password@pgbouncer:5432/nishchinto
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=amqp://nishchinto:nishchinto_password@rabbitmq:5672//
+    depends_on:
+      - pgbouncer
+      - redis
+      - rabbitmq
+
+  celery_worker_high:
+    build: .
+    command: celery -A nishchinto worker -l info -Q high_priority
+    volumes:
+      - .:/app
+    environment:
+      - DATABASE_URL=postgres://nishchinto:nishchinto_password@pgbouncer:5432/nishchinto
+      - CELERY_BROKER_URL=amqp://nishchinto:nishchinto_password@rabbitmq:5672//
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - rabbitmq
+      - redis
+
+  celery_worker_default:
+    build: .
+    command: celery -A nishchinto worker -l info -Q default
+    volumes:
+      - .:/app
+    environment:
+      - DATABASE_URL=postgres://nishchinto:nishchinto_password@pgbouncer:5432/nishchinto
+      - CELERY_BROKER_URL=amqp://nishchinto:nishchinto_password@rabbitmq:5672//
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - rabbitmq
+      - redis
+
+volumes:
+  postgres_data:
+  redis_data:

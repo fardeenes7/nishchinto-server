@@ -1,0 +1,17 @@
+.git
+.gitignore
+.dockerignore
+.env
+__pycache__/
+*.py[cod]
+*$py.class
+media/
+staticfiles/
+.venv/
+venv/
+env/
+Dockerfile
+docker-compose.yml
+.idea/
+.vscode/
+README.md
