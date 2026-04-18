@@ -1,4 +1,4 @@
-from rest_framework import generics, status
+from rest_framework import generics, status, serializers
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from marketing.models import WaitlistEntry
@@ -6,12 +6,18 @@ from users.models import User
 from shops.models import Shop, SubscriptionPlan
 from django.db import transaction
 
+class ShopClaimSerializer(serializers.Serializer):
+    token = serializers.CharField()
+    subdomain = serializers.CharField()
+    password = serializers.CharField()
+
 class ShopClaimView(generics.GenericAPIView):
     """
     Step 1 of Merchant Onboarding.
     User provides their invite token, desired subdomain, and password.
     """
     permission_classes = [AllowAny]
+    serializer_class = ShopClaimSerializer
 
     def post(self, request, *args, **kwargs):
         token = request.data.get('token')

@@ -7,8 +7,8 @@ def send_waitlist_invite_email(email, token):
     """
     Sends an invitation email to the approved waitlist user.
     """
-    # In a real scenario, this URL would point to the claim page in apps/web
-    claim_url = f"https://nishchinto.com.bd/claim?token={token}"
+    frontend_url = getattr(settings, 'FRONTEND_URL', 'https://app.nishchinto.com.bd')
+    claim_url = f"{frontend_url}/claim?token={token}"
     
     subject = "Your Nishchinto Beta Invite is Ready!"
     message = f"Congratulations! You've been approved. Click here to claim your shop: {claim_url}"
