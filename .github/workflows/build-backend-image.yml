@@ -7,6 +7,7 @@ on:
   workflow_dispatch: # Allows manual trigger
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   REGISTRY: ghcr.io
   # github.repository is usually in the format owner/repo (e.g., username/mahajon-server)
   IMAGE_NAME: ${{ github.repository }}
