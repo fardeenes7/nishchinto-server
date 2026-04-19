@@ -12,6 +12,14 @@ from catalog.api.serializers import ProductDetailSerializer, ProductListSerializ
 from catalog.models import Product
 from catalog.selectors import product_get_for_storefront, product_list_for_storefront
 from shops.models import Shop
+from rest_framework import serializers
+from django.core.paginator import Paginator
+
+
+class StorefrontShopSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Shop
+        fields = ["id", "name", "subdomain", "base_currency"]
 
 
 def _get_shop_by_slug(shop_slug: str) -> Shop:
@@ -42,7 +50,6 @@ class StorefrontProductListView(APIView):
 
         # Simple cursor pagination for storefront
         page_size = min(int(request.query_params.get("page_size", 24)), 100)
-        from django.core.paginator import Paginator
         paginator = Paginator(qs, page_size)
         page = paginator.get_page(int(request.query_params.get("page", 1)))
 
@@ -101,3 +108,19 @@ class StorefrontTrackingConfigView(APIView):
 
         from catalog.api.serializers import ShopTrackingConfigSerializer
         return Response(ShopTrackingConfigSerializer(config).data)
+
+
+class StorefrontShopView(APIView):
+    """GET /api/v1/storefront/{shop_slug}/config/ — Used to get shop name/currency."""
+
+    authentication_classes = []
+    permission_classes = []
+
+    @extend_schema(responses={200: StorefrontShopSerializer}, tags=["storefront"])
+    def get(self, request, shop_slug: str):
+        try:
+            shop = _get_shop_by_slug(shop_slug)
+        except Shop.DoesNotExist:
+            return Response({"detail": "Shop not found."}, status=404)
+
+        return Response(StorefrontShopSerializer(shop).data)

@@ -43,7 +43,16 @@ class Shop(SoftDeleteModel):
         default=0,
         help_text="Added to every order's total weight for accurate courier billing",
     )
-    
+
+    # Fix 6.9 (post_v03_debrief.md): Canonical currency for all prices in this shop.
+    # Individual price fields (base_price, price_override) inherit from this — they do
+    # NOT carry their own currency metadata. Live exchange rate sync is out of scope.
+    base_currency = models.CharField(
+        max_length=3,
+        default="BDT",
+        help_text="ISO 4217 currency code (e.g. BDT, USD, EUR). All price fields inherit from this.",
+    )
+
     def __str__(self):
         return self.name
 

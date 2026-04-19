@@ -11,6 +11,7 @@ from catalog.api.views.storefront import (
     StorefrontProductListView,
     StorefrontProductDetailView,
     StorefrontTrackingConfigView,
+    StorefrontShopView,
 )
 
 # Dashboard router
@@ -66,5 +67,10 @@ storefront_urlpatterns = [
         "<slug:shop_slug>/tracking/",
         StorefrontTrackingConfigView.as_view(),
         name="storefront-tracking-config",
+    ),
+    path(
+        "<slug:shop_slug>/config/",
+        StorefrontShopView.as_view(),
+        name="storefront-shop-config",
     ),
 ]

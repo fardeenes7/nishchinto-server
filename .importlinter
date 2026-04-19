@@ -16,3 +16,25 @@ layers =
     users.services
     users.selectors
     users.models
+
+# ── Module Boundary Contracts (1.5 — post_v03_debrief.md) ────────────────────
+# These enforce the modular monolith architecture at the linter level.
+# Cross-module communication must go through services.py, not direct model imports.
+
+[importlinter:contract:catalog_isolation]
+name = Catalog must not import from marketing
+type = forbidden
+source_modules = catalog
+forbidden_modules = marketing
+
+[importlinter:contract:media_isolation]
+name = Media must not import from catalog directly
+type = forbidden
+source_modules = nishchinto_media
+forbidden_modules = catalog
+
+[importlinter:contract:shops_isolation]
+name = Shops must not import from catalog
+type = forbidden
+source_modules = shops
+forbidden_modules = catalog

@@ -60,10 +60,13 @@ services:
       - DATABASE_URL=postgres://nishchinto:nishchinto_password@pgbouncer:5432/nishchinto
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=amqp://nishchinto:nishchinto_password@rabbitmq:5672//
+      - MEILISEARCH_HOST=http://meilisearch:7700
+      - MEILISEARCH_API_KEY=nishchinto_meili_master_key
     depends_on:
       - pgbouncer
       - redis
       - rabbitmq
+      - meilisearch
 
   celery_worker_high:
     build: .
@@ -74,9 +77,12 @@ services:
       - DATABASE_URL=postgres://nishchinto:nishchinto_password@pgbouncer:5432/nishchinto
       - CELERY_BROKER_URL=amqp://nishchinto:nishchinto_password@rabbitmq:5672//
       - REDIS_URL=redis://redis:6379/0
+      - MEILISEARCH_HOST=http://meilisearch:7700
+      - MEILISEARCH_API_KEY=nishchinto_meili_master_key
     depends_on:
       - rabbitmq
       - redis
+      - meilisearch
 
   celery_worker_default:
     build: .
@@ -87,9 +93,30 @@ services:
       - DATABASE_URL=postgres://nishchinto:nishchinto_password@pgbouncer:5432/nishchinto
       - CELERY_BROKER_URL=amqp://nishchinto:nishchinto_password@rabbitmq:5672//
       - REDIS_URL=redis://redis:6379/0
+      - MEILISEARCH_HOST=http://meilisearch:7700
+      - MEILISEARCH_API_KEY=nishchinto_meili_master_key
     depends_on:
       - rabbitmq
       - redis
+      - meilisearch
+
+  # Fix 6.8 (post_v03_debrief.md): Meilisearch — primary catalog search engine.
+  # Supports Bengali phonetic (Banglish) typo-tolerance and faceted filtering.
+  # Replaces the Postgres FTS placeholder from v0.3.
+  meilisearch:
+    image: getmeili/meilisearch:v1.13
+    environment:
+      MEILI_MASTER_KEY: nishchinto_meili_master_key
+      MEILI_ENV: development
+    ports:
+      - "7700:7700"
+    volumes:
+      - meilisearch_data:/meili_data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7700/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   traefik:
     image: traefik:v2.10
@@ -171,3 +198,4 @@ volumes:
   postgres_data:
   redis_data:
   minio_data:
+  meilisearch_data:

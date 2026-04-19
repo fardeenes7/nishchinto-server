@@ -52,7 +52,7 @@ class InventoryLog(models.Model):
         indexes = [
             models.Index(
                 fields=["shop", "variant", "created_at"],
-                name="invlog_shop_variant_created_idx",
+                name="invlog_shop_var_created_idx",
             ),
             models.Index(
                 fields=["shop", "created_at"],
