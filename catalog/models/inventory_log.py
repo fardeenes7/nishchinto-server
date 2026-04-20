@@ -60,7 +60,7 @@ class InventoryLog(models.Model):
             ),
         ]
         # NOTE: This table should eventually be partitioned by created_at month.
-        # See system_audit_report.md §2 "Data Duplication in Event Logs".
+        # See global_system_audit_report.md §2 "Data Duplication in Event Logs".
 
     def __str__(self):
         sign = "+" if self.delta >= 0 else ""

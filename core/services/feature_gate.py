@@ -3,7 +3,7 @@ from django.core.cache import cache
 from shops.models import Shop
 
 # In a real scenario, this matrix would be manageable from the internal admin.
-# Hardcoding as per business_rules_and_limits.md
+# Hardcoding as per global_business_rules_and_limits.md
 PLAN_MATRIX = {
     'Free': {
         'max_stores': 1,
