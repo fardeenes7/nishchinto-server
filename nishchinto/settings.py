@@ -158,6 +158,10 @@ REST_FRAMEWORK = {
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_THROTTLE_RATES': {
+        'social_oauth': '30/hour',
+        'social_publish': '180/hour',
+    },
 }
 
 # SimpleJWT
@@ -196,6 +200,11 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': 60 * 5,  # Every 5 minutes
         'options': {'queue': 'default'},
     },
+    'refresh-social-meta-tokens': {
+        'task': 'marketing.tasks.refresh_meta_tokens',
+        'schedule': 60 * 60 * 6,  # Every 6 hours
+        'options': {'queue': 'default'},
+    },
 }
 CELERY_TIMEZONE = TIME_ZONE
 
@@ -223,3 +232,8 @@ SUBDOMAIN_BLACKLIST = {
 # CatalogIndexingTask syncs Product records on create/update/delete via post_save.
 MEILISEARCH_HOST = env('MEILISEARCH_HOST', default='http://localhost:7700')
 MEILISEARCH_API_KEY = env('MEILISEARCH_API_KEY', default='nishchinto_meili_master_key')
+
+# ── Meta OAuth (v0.4 social connect) ───────────────────────────────────────
+META_APP_ID = env('META_APP_ID', default='')
+META_APP_SECRET = env('META_APP_SECRET', default='')
+META_OAUTH_REDIRECT_URI = env('META_OAUTH_REDIRECT_URI', default='')

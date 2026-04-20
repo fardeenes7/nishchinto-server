@@ -1,4 +1,4 @@
-from rest_framework.throttling import AnonRateThrottle
+from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 
 class WaitlistRedisThrottle(AnonRateThrottle):
     """
@@ -7,3 +7,11 @@ class WaitlistRedisThrottle(AnonRateThrottle):
     Requires Redis cache backend to be functioning.
     """
     rate = '3/hour'
+
+
+class SocialOAuthThrottle(UserRateThrottle):
+    scope = "social_oauth"
+
+
+class SocialPublishThrottle(UserRateThrottle):
+    scope = "social_publish"
