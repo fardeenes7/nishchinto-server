@@ -50,7 +50,11 @@ class Shop(SoftDeleteModel):
     base_currency = models.CharField(
         max_length=3,
         default="BDT",
-        help_text="ISO 4217 currency code (e.g. BDT, USD, EUR). All price fields inherit from this.",
+        help_text=(
+            "ISO 4217 currency code for this shop. All price fields inherit "
+            "from this value — individual prices do not carry their own currency. "
+            "Example: BDT, USD, EUR."
+        ),
     )
 
     def __str__(self):
@@ -64,6 +68,7 @@ class ShopMember(SoftDeleteModel):
     ROLE_CHOICES = (
         ('OWNER', 'Owner'),
         ('MANAGER', 'Manager'),
+        ('INVENTORY_MANAGER', 'Inventory Manager'),
         ('CASHIER', 'Cashier'),
     )
 
@@ -77,6 +82,50 @@ class ShopMember(SoftDeleteModel):
 
     def __str__(self):
         return f"{self.user.email} - {self.shop.name} ({self.role})"
+
+
+class ShopSettings(TenantModel):
+    """
+    Per-tenant configuration store for checkout, logistics, messaging, and
+    operational controls.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    shop = models.OneToOneField(Shop, on_delete=models.CASCADE, related_name='settings')
+
+    stock_reservation_minutes = models.PositiveIntegerField(default=30)
+    allow_guest_checkout = models.BooleanField(default=True)
+    mandatory_advance_fee_bdt = models.PositiveIntegerField(default=0)
+    maintenance_mode = models.BooleanField(default=False)
+    branding_slug_release_days = models.PositiveIntegerField(default=30)
+
+    ai_credit_balance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    sms_enabled = models.BooleanField(default=False)
+    sms_balance_credits = models.PositiveIntegerField(default=0)
+    notification_targets = models.JSONField(default=list, blank=True)
+
+    messenger_context_window_size = models.PositiveIntegerField(default=20)
+    messenger_human_takeover_ttl_minutes = models.PositiveIntegerField(default=30)
+    messenger_max_orders_per_psid_per_day = models.PositiveIntegerField(default=5)
+    messenger_order_draft_ttl_hours = models.PositiveIntegerField(default=24)
+    messenger_fallback_message = models.TextField(
+        default="I'm having a little trouble right now. Our team will reach out to you shortly! 🙏"
+    )
+
+    custom_domain_verified = models.BooleanField(default=False)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['shop', 'deleted_at'], name='shopsettings_shop_deleted_idx'),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self.tenant_id:
+            self.tenant_id = self.shop_id
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Settings for {self.shop.name}"
 
 class CustomerProfile(TenantModel):
     """
