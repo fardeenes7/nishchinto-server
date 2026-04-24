@@ -9,6 +9,8 @@ from catalog.services.product import (
     product_soft_delete,
     variant_create,
     variant_update_stock,
+    variant_bulk_update,
+    product_bulk_update,
     product_media_attach,
     product_media_reorder,
 )
@@ -25,6 +27,8 @@ __all__ = [
     "product_soft_delete",
     "variant_create",
     "variant_update_stock",
+    "variant_bulk_update",
+    "product_bulk_update",
     "product_media_attach",
     "product_media_reorder",
     "generate_sku",

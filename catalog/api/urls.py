@@ -12,6 +12,7 @@ from catalog.api.views.storefront import (
     StorefrontProductDetailView,
     StorefrontTrackingConfigView,
     StorefrontShopView,
+    StorefrontThemeView,
 )
 
 # Dashboard router
@@ -72,5 +73,10 @@ storefront_urlpatterns = [
         "<slug:shop_slug>/config/",
         StorefrontShopView.as_view(),
         name="storefront-shop-config",
+    ),
+    path(
+        "<slug:shop_slug>/theme/",
+        StorefrontThemeView.as_view(),
+        name="storefront-theme",
     ),
 ]

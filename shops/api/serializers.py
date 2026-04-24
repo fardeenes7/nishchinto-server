@@ -1,6 +1,5 @@
 from rest_framework import serializers
-from shops.models import Shop
-from shops.models import ShopMember, ShopSettings
+from shops.models import Shop, ShopMember, ShopSettings, StoreTheme
 from catalog.api.serializers import ShopTrackingConfigSerializer
 
 
@@ -30,3 +29,13 @@ class ShopSettingsSerializer(serializers.ModelSerializer):
             "messenger_greeting_keywords", "notification_targets",
         ]
         read_only_fields = ["id"]
+
+class StoreThemeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StoreTheme
+        fields = [
+            "id", "theme_id", "aesthetic_overrides", 
+            "active_components", "typography"
+        ]
+        read_only_fields = ["id"]
+

@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from catalog.api.serializers import ProductDetailSerializer, ProductListSerializer
+from shops.api.serializers import StoreThemeSerializer
 from catalog.models import Product
 from catalog.selectors import product_get_for_storefront, product_list_for_storefront
 from shops.models import Shop
@@ -124,3 +125,21 @@ class StorefrontShopView(APIView):
             return Response({"detail": "Shop not found."}, status=404)
 
         return Response(StorefrontShopSerializer(shop).data)
+
+class StorefrontThemeView(APIView):
+    """GET /api/v1/storefront/{shop_slug}/theme/ — Used by Next.js layout server render."""
+
+    authentication_classes = []
+    permission_classes = []
+
+    @extend_schema(responses={200: StoreThemeSerializer}, tags=["storefront"])
+    def get(self, request, shop_slug: str):
+        try:
+            shop = _get_shop_by_slug(shop_slug)
+        except Shop.DoesNotExist:
+            return Response({"detail": "Shop not found."}, status=404)
+
+        from shops.models import StoreTheme
+        theme, _ = StoreTheme.objects.get_or_create(shop_id=shop.id)
+        return Response(StoreThemeSerializer(theme).data)
+

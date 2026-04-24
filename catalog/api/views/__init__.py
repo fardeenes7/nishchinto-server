@@ -36,6 +36,8 @@ from catalog.api.serializers import (
     ProductVariantWriteSerializer,
     ShopTrackingConfigSerializer,
     StockAdjustSerializer,
+    ProductBulkUpdateItemSerializer,
+    VariantBulkUpdateItemSerializer,
 )
 from catalog.models import ShopTrackingConfig
 from catalog.selectors import (

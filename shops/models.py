@@ -30,6 +30,7 @@ class Shop(SoftDeleteModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255)
     subdomain = models.CharField(max_length=100, unique=True, db_index=True)
+    custom_domain = models.CharField(max_length=255, unique=True, null=True, blank=True, db_index=True)
     plan = models.ForeignKey(SubscriptionPlan, on_delete=models.PROTECT, related_name='shops', null=True)
     grace_period_until = models.DateTimeField(null=True, blank=True)
     
@@ -163,3 +164,42 @@ class CustomerProfile(TenantModel):
     
     def __str__(self):
         return f"{self.name} ({self.phone_number})"
+
+class StoreTheme(TenantModel):
+    """
+    Multi-Theme Architecture data model for the storefront.
+    Stores the selected base theme and any explicit aesthetic overrides.
+    """
+    THEME_CHOICES = (
+        ('minimalist', 'Minimalist'),
+        ('bold', 'Bold & Tech'),
+        ('elegance', 'Soft Elegance'),
+        ('urban', 'Urban Streetwear'),
+    )
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    shop = models.OneToOneField(Shop, on_delete=models.CASCADE, related_name='theme')
+    
+    theme_id = models.CharField(max_length=50, choices=THEME_CHOICES, default='minimalist')
+    
+    # Stores overrides like primary color, corner radius (sharp/soft)
+    aesthetic_overrides = models.JSONField(default=dict, blank=True)
+    
+    # Stores component selections (e.g., header: 'minimal', hero: 'split')
+    active_components = models.JSONField(default=dict, blank=True)
+    
+    # Stores typography rules (heading font, body font)
+    typography = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['shop', 'deleted_at'], name='storetheme_shop_deleted_idx'),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self.tenant_id:
+            self.tenant_id = self.shop_id
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Theme ({self.theme_id}) for {self.shop.name}"

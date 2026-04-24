@@ -4,8 +4,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 from django.shortcuts import get_object_or_404
 from shops.models import Shop
-from shops.models import ShopMember
-from .serializers import ShopSerializer, ActiveShopContextSerializer, ShopSettingsSerializer, ShopTrackingConfigSerializer
+from shops.models import ShopMember, ShopSettings, StoreTheme
+from .serializers import ShopSerializer, ActiveShopContextSerializer, ShopSettingsSerializer, ShopTrackingConfigSerializer, StoreThemeSerializer
 from shops.models import ShopSettings
 from catalog.models import ShopTrackingConfig
 
@@ -179,3 +179,34 @@ class ShopTrackingConfigView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
+
+class StoreThemeView(APIView):
+    """
+    GET /api/v1/shops/theme/
+    PATCH /api/v1/shops/theme/
+    """
+    permission_classes = [IsAuthenticated]
+
+    def _get_shop_id(self, request):
+        return ShopDetailView()._resolve_shop_id(request)
+
+    def get(self, request):
+        shop_id = self._get_shop_id(request)
+        if not shop_id:
+            return Response({"detail": "No accessible shop found."}, status=status.HTTP_404_NOT_FOUND)
+        
+        theme, _ = StoreTheme.objects.get_or_create(shop_id=shop_id)
+        serializer = StoreThemeSerializer(theme)
+        return Response(serializer.data)
+
+    def patch(self, request):
+        shop_id = self._get_shop_id(request)
+        if not shop_id:
+            return Response({"detail": "No accessible shop found."}, status=status.HTTP_404_NOT_FOUND)
+        
+        theme, _ = StoreTheme.objects.get_or_create(shop_id=shop_id)
+        serializer = StoreThemeSerializer(theme, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
