@@ -1,72 +1,61 @@
 from rest_framework import generics, status, serializers
 from rest_framework.response import Response
-from rest_framework.permissions import AllowAny
-from marketing.models import WaitlistEntry
-from users.models import User
-from shops.models import Shop, SubscriptionPlan
+from rest_framework.permissions import IsAuthenticated
+from shops.models import Shop, SubscriptionPlan, ShopMember
 from django.db import transaction
 
-class ShopClaimSerializer(serializers.Serializer):
-    token = serializers.CharField()
-    subdomain = serializers.CharField()
-    password = serializers.CharField()
+class ShopCreateSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=255)
+    subdomain = serializers.CharField(max_length=100)
 
-class ShopClaimView(generics.GenericAPIView):
+class ShopCreateView(generics.CreateAPIView):
     """
-    Step 1 of Merchant Onboarding.
-    User provides their invite token, desired subdomain, and password.
+    Publicly accessible store creation for authenticated users.
+    Waitlist system is removed.
     """
-    permission_classes = [AllowAny]
-    serializer_class = ShopClaimSerializer
+    permission_classes = [IsAuthenticated] # Must be logged in via Google
+    serializer_class = ShopCreateSerializer
 
     def post(self, request, *args, **kwargs):
-        token = request.data.get('token')
-        subdomain = request.data.get('subdomain')
-        password = request.data.get('password')
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
         
-        if not all([token, subdomain, password]):
-            return Response({'detail': 'Missing required fields.'}, status=status.HTTP_400_BAD_REQUEST)
+        subdomain = serializer.validated_data['subdomain'].lower()
+        name = serializer.validated_data['name']
+        user = request.user
 
-        try:
-            entry = WaitlistEntry.objects.get(invite_token=token, status='APPROVED')
-        except WaitlistEntry.DoesNotExist:
-            return Response({'detail': 'Invalid or expired invite token.'}, status=status.HTTP_404_NOT_FOUND)
+        # 1. Check if user already owns a shop (Nishchinto is 1-shop-per-user for now)
+        if ShopMember.objects.filter(user=user, role='OWNER').exists():
+            return Response({'detail': 'You already own a shop.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check subdomain availability
+        # 2. Check subdomain availability
         if Shop.objects.filter(subdomain=subdomain).exists():
             return Response({'detail': 'Subdomain already taken.'}, status=status.HTTP_400_BAD_REQUEST)
 
         from django.conf import settings
-        if subdomain.lower() in settings.SUBDOMAIN_BLACKLIST:
+        if subdomain in settings.SUBDOMAIN_BLACKLIST:
              return Response({'detail': 'Subdomain is reserved.'}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
-            # 1. Create User
-            user = User.objects.create_user(
-                email=entry.email,
-                password=password
-            )
-            
-            # 2. Assign Default Free Plan (or map from waitlist if needed)
+            # 3. Assign Default Free Plan
             free_plan, _ = SubscriptionPlan.objects.get_or_create(name='FREE')
             
-            # 3. Create Shop
+            # 4. Create Shop
             shop = Shop.objects.create(
-                name=entry.survey_data.get('business_name', 'My New Shop'),
-                subdomain=subdomain.lower(),
+                name=name,
+                subdomain=subdomain,
                 plan=free_plan
             )
             
-            # 4. Map Owner
-            from shops.models import ShopMember
+            # 5. Map Owner
             ShopMember.objects.create(
                 user=user,
                 shop=shop,
                 role='OWNER'
             )
             
-            # 5. Mark entry as processed (optionally delete or change status)
-            entry.status = 'CLAIMED' # Need to add this choice if not present
-            entry.save()
-
-        return Response({'detail': 'Shop claimed successfully! You can now login.'}, status=status.HTTP_201_CREATED)
+        return Response({
+            'detail': 'Shop created successfully!', 
+            'subdomain': subdomain,
+            'shop_id': str(shop.id)
+        }, status=status.HTTP_201_CREATED)
