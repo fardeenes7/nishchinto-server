@@ -111,6 +111,14 @@ class ShopSettings(TenantModel):
     messenger_fallback_message = models.TextField(
         default="I'm having a little trouble right now. Our team will reach out to you shortly! 🙏"
     )
+    messenger_greeting_keywords = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=(
+            "Case-insensitive full-message greeting keywords that trigger an auto-welcome "
+            "without using AI credits. Leave empty to use the system defaults."
+        ),
+    )
 
     custom_domain_verified = models.BooleanField(default=False)
 

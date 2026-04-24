@@ -69,6 +69,7 @@ INSTALLED_APPS = [
     'marketing',
     'media.apps.MediaConfig',
     'catalog',
+    'messenger',
 ]
 
 SITE_ID = 1
@@ -209,8 +210,25 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': 60 * 60 * 6,  # Every 6 hours
         'options': {'queue': 'default'},
     },
+    'sweep-old-messenger-messages': {
+        'task': 'messenger.tasks.sweep_old_messages',
+        'schedule': 60 * 60 * 24,  # Every 24 hours (30-day retention policy)
+        'options': {'queue': 'default'},
+    },
 }
 CELERY_TIMEZONE = TIME_ZONE
+
+# ── Redis Cache (django-redis) ───────────────────────────────────────────────
+# Used for ConversationBotState, context cache, and stock reservation Lua scripts.
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": env("REDIS_URL", default="redis://localhost:6379/0"),
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        },
+    }
+}
 
 # Email Configuration
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
@@ -251,3 +269,7 @@ MEILISEARCH_API_KEY = env('MEILISEARCH_API_KEY', default='nishchinto_meili_maste
 META_APP_ID = env('META_APP_ID', default='')
 META_APP_SECRET = env('META_APP_SECRET', default='')
 META_OAUTH_REDIRECT_URI = env('META_OAUTH_REDIRECT_URI', default='')
+META_WEBHOOK_VERIFY_TOKEN = env('META_WEBHOOK_VERIFY_TOKEN', default='nishchinto_webhook_verify')
+
+# ── OpenAI (v0.6 AI Chatbot) ─────────────────────────────────────────────────
+OPENAI_API_KEY = env('OPENAI_API_KEY', default='')

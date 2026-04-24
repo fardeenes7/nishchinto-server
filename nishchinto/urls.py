@@ -33,5 +33,6 @@ urlpatterns = [
     path('api/v1/webhooks/', include('webhooks.api.urls')),
     path('api/v1/compliance/', include('compliance.api.urls')),
     path('api/v1/media/', include('media.api.urls')),
+    path('api/v1/messenger/', include('messenger.api.urls')),
     # path('api/v1/users/', include('users.api.urls')),
 ]
