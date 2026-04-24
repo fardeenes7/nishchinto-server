@@ -2,6 +2,7 @@ from datetime import timedelta
 
 from django.utils import timezone
 
+from compliance.audit import audit_event_create
 from orders.models import Order, PaymentInvoice
 from shops.models import ShopSettings
 
@@ -57,4 +58,15 @@ def payment_invoice_consume(*, token: str, shop_id: str) -> PaymentInvoice:
     invoice.is_used = True
     invoice.used_at = timezone.now()
     invoice.save(update_fields=["is_used", "used_at", "updated_at"])
+
+    audit_event_create(
+        shop_id=str(invoice.shop_id),
+        action="PAYMENT_INVOICE_CONSUMED",
+        resource_type="orders.PaymentInvoice",
+        resource_id=str(invoice.id),
+        metadata={
+            "order_id": str(invoice.order_id),
+            "token": str(invoice.token),
+        },
+    )
     return invoice

@@ -53,7 +53,7 @@ class SocialConnection(TenantModel):
 
     class Meta:
         indexes = [
-            models.Index(fields=["shop", "provider", "status"], name="social_conn_shop_provider_status_idx"),
+            models.Index(fields=["shop", "provider", "status"], name="socconn_shop_prov_status_ix"),
         ]
         constraints = [
             models.UniqueConstraint(
@@ -81,7 +81,7 @@ class ProductSocialPostLog(TenantModel):
 
     class Meta:
         indexes = [
-            models.Index(fields=["shop", "product", "status"], name="social_post_shop_product_status_idx"),
+            models.Index(fields=["shop", "product", "status"], name="socpost_shop_prod_status_ix"),
             models.Index(fields=["connection", "created_at"], name="social_post_conn_created_idx"),
         ]
         constraints = [

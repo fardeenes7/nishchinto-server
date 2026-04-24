@@ -43,7 +43,7 @@ class Migration(migrations.Migration):
                 ('shop', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='notification_delivery_logs', to='shops.shop')),
             ],
             options={
-                'indexes': [models.Index(fields=['shop', 'status', 'created_at'], name='notiflog_shop_status_created_idx')],
+                'indexes': [models.Index(fields=['shop', 'status', 'created_at'], name='notif_shop_status_created_ix')],
             },
         ),
         migrations.CreateModel(

@@ -221,8 +221,18 @@ EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='')
 DEFAULT_FROM_EMAIL = '"Nishchinto" <noreply@nishchinto.com.bd>'
 
-# CORS Configuration
-CORS_ALLOW_ALL_ORIGINS = True # For dev, restrict in prod
+# CORS / CSRF Configuration
+# In production: set CORS_ALLOWED_ORIGINS and CSRF_TRUSTED_ORIGINS via env
+CORS_ALLOWED_ORIGINS = env.list(
+    'CORS_ALLOWED_ORIGINS',
+    default=['http://localhost:3000', 'http://127.0.0.1:3000']
+)
+CORS_ALLOW_CREDENTIALS = True
+
+CSRF_TRUSTED_ORIGINS = env.list(
+    'CSRF_TRUSTED_ORIGINS',
+    default=['http://localhost:3000', 'http://127.0.0.1:3000']
+)
 
 # Subdomain Routing Security
 SUBDOMAIN_BLACKLIST = {

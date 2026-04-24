@@ -1,16 +1,16 @@
-# ─── LOCAL DEVELOPMENT ────────────────────────────────────────────────────────
-# Usage: docker compose up
-# Requires server/.env at the project root (see server/.env.example).
-# Hot-reload is enabled for the API (runserver).
+# ─── PRODUCTION ───────────────────────────────────────────────────────────────
+# Usage: docker compose -f docker-compose.prod.yml up -d
+# Requires a .env file at server/ root (see server/.env.example).
+# In Coolify: all env vars below map to Coolify Environment Variables.
 # ─────────────────────────────────────────────────────────────────────────────
 
 services:
 
   # ── Infrastructure ───────────────────────────────────────────────────────────
   db:
-    image: postgres:16
+    image: postgres:16-alpine
     platform: linux/amd64
-    restart: unless-stopped
+    restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -21,26 +21,27 @@ services:
       PGBOUNCER_DB_PASSWORD: ${PGBOUNCER_DB_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./docker/postgres/init:/docker-entrypoint-initdb.d
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 6
+      start_period: 30s
 
   pgbouncer:
     image: public.ecr.aws/bitnami/pgbouncer:1.25.1-debian-12-r8
     platform: linux/amd64
-    restart: unless-stopped
+    restart: always
     environment:
-      - PGBOUNCER_DATABASE=nishchinto
+      - PGBOUNCER_DATABASE=${PGBOUNCER_DB_NAME}
       - PGBOUNCER_PORT=5432
       - PGBOUNCER_AUTH_TYPE=scram-sha-256
       - POSTGRESQL_HOST=db
       - POSTGRESQL_USER=${PGBOUNCER_DB_USER}
       - POSTGRESQL_PASSWORD=${PGBOUNCER_DB_PASSWORD}
-      - PGBOUNCER_MAX_CLIENT_CONN=500
-      - PGBOUNCER_POOL_MODE=transaction
+      - PGBOUNCER_MAX_CLIENT_CONN=${PGBOUNCER_MAX_CLIENT_CONN}
+      - PGBOUNCER_POOL_MODE=${PGBOUNCER_POOL_MODE}
     depends_on:
       db:
         condition: service_healthy
@@ -48,68 +49,66 @@ services:
       test: ["CMD-SHELL", "pgbouncer --version"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 6
+      start_period: 20s
 
   redis:
     image: redis:7
     platform: linux/amd64
-    restart: unless-stopped
+    restart: always
     volumes:
       - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 6
 
   rabbitmq:
     image: rabbitmq:3-management
     platform: linux/amd64
-    restart: unless-stopped
+    restart: always
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
-    ports:
-      - "15672:15672"  # Management UI — http://localhost:15672
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 6
+      start_period: 30s
 
   meilisearch:
     image: getmeili/meilisearch:v1.13
-    restart: unless-stopped
-    command: ["--db-path", "/meili_data/data.ms", "--env", "development"]
+    restart: always
+    command: ["--db-path", "/meili_data/data.ms", "--env", "production"]
     environment:
       MEILI_MASTER_KEY: ${MEILISEARCH_API_KEY}
     volumes:
       - meilisearch_data:/meili_data
-    ports:
-      - "7700:7700"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7700/health"]
-      interval: 10s
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:7700/health"]
+      interval: 15s
       timeout: 5s
-      retries: 5
+      retries: 6
+      start_period: 30s
 
-  # ── Django API (hot-reload) ──────────────────────────────────────────────────
+  # ── Django API (gunicorn) ────────────────────────────────────────────────────
   api:
     build:
       context: .
       dockerfile: Dockerfile
-    command: python manage.py runserver 0.0.0.0:8000
-    restart: unless-stopped
-    volumes:
-      - .:/app                    # live-reload: code changes reflect instantly
+    restart: always
     ports:
       - "8000:8000"
     environment:
-      DEBUG: "True"
-      SECRET_KEY: ${SECRET_KEY:-django-insecure-dev-only-not-for-production}
-      ALLOWED_HOSTS: "localhost,127.0.0.1,api"
+      DEBUG: "False"
+      SECRET_KEY: ${SECRET_KEY}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS}
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL}
@@ -121,6 +120,15 @@ services:
       AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME}
       AWS_S3_REGION_NAME: ${AWS_S3_REGION_NAME}
       CDN_BASE_URL: ${CDN_BASE_URL}
+      EMAIL_HOST: ${EMAIL_HOST}
+      EMAIL_PORT: ${EMAIL_PORT}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      META_APP_ID: ${META_APP_ID:-}
+      META_APP_SECRET: ${META_APP_SECRET:-}
+      META_OAUTH_REDIRECT_URI: ${META_OAUTH_REDIRECT_URI:-}
     depends_on:
       pgbouncer:
         condition: service_healthy
@@ -132,79 +140,80 @@ services:
         condition: service_healthy
 
   # ── Celery Workers ───────────────────────────────────────────────────────────
-  celery_worker_high:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: celery -A nishchinto worker -l info -Q high_priority
-    restart: unless-stopped
-    volumes:
-      - .:/app
-    environment:
-      DEBUG: "True"
-      SECRET_KEY: ${SECRET_KEY:-django-insecure-dev-only-not-for-production}
-      DATABASE_URL: ${DATABASE_URL}
-      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
-      REDIS_URL: ${REDIS_URL}
-      MEILISEARCH_HOST: ${MEILISEARCH_HOST}
-      MEILISEARCH_API_KEY: ${MEILISEARCH_API_KEY}
-    depends_on:
-      pgbouncer:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
   celery_worker_default:
     build:
       context: .
       dockerfile: Dockerfile
-    command: celery -A nishchinto worker -l info -Q default
-    restart: unless-stopped
-    volumes:
-      - .:/app
+    command: celery -A nishchinto worker -l info -Q default --concurrency 4
+    restart: always
     environment:
-      DEBUG: "True"
-      SECRET_KEY: ${SECRET_KEY:-django-insecure-dev-only-not-for-production}
+      DEBUG: "False"
+      SECRET_KEY: ${SECRET_KEY}
       DATABASE_URL: ${DATABASE_URL}
-      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
       REDIS_URL: ${REDIS_URL}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
       MEILISEARCH_HOST: ${MEILISEARCH_HOST}
       MEILISEARCH_API_KEY: ${MEILISEARCH_API_KEY}
+      SENTRY_DSN: ${SENTRY_DSN:-}
     depends_on:
       pgbouncer:
         condition: service_healthy
+      redis:
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+
+  celery_worker_high:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A nishchinto worker -l info -Q high_priority --concurrency 2
+    restart: always
+    environment:
+      DEBUG: "False"
+      SECRET_KEY: ${SECRET_KEY}
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+      MEILISEARCH_HOST: ${MEILISEARCH_HOST}
+      MEILISEARCH_API_KEY: ${MEILISEARCH_API_KEY}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
       redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      meilisearch:
         condition: service_healthy
 
   celery_worker_media:
     build:
       context: .
       dockerfile: Dockerfile
-    command: celery -A nishchinto worker -l info -Q media_processing
-    restart: unless-stopped
-    volumes:
-      - .:/app
+    command: celery -A nishchinto worker -l info -Q media_processing --concurrency 2
+    restart: always
     environment:
-      DEBUG: "True"
-      SECRET_KEY: ${SECRET_KEY:-django-insecure-dev-only-not-for-production}
+      DEBUG: "False"
+      SECRET_KEY: ${SECRET_KEY}
       DATABASE_URL: ${DATABASE_URL}
-      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
       REDIS_URL: ${REDIS_URL}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       AWS_S3_ENDPOINT_URL: ${AWS_S3_ENDPOINT_URL}
       AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME}
       AWS_S3_REGION_NAME: ${AWS_S3_REGION_NAME}
+      SENTRY_DSN: ${SENTRY_DSN:-}
     depends_on:
       pgbouncer:
         condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
       redis:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
 
   celery_beat:
@@ -212,21 +221,20 @@ services:
       context: .
       dockerfile: Dockerfile
     command: celery -A nishchinto beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
-    restart: unless-stopped
-    volumes:
-      - .:/app
+    restart: always
     environment:
-      DEBUG: "True"
-      SECRET_KEY: ${SECRET_KEY:-django-insecure-dev-only-not-for-production}
+      DEBUG: "False"
+      SECRET_KEY: ${SECRET_KEY}
       DATABASE_URL: ${DATABASE_URL}
-      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
       REDIS_URL: ${REDIS_URL}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+      SENTRY_DSN: ${SENTRY_DSN:-}
     depends_on:
       pgbouncer:
         condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
       redis:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
 
 volumes:

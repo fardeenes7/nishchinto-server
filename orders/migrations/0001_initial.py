@@ -79,6 +79,7 @@ class Migration(migrations.Migration):
                 ('is_used', models.BooleanField(default=False)),
                 ('used_at', models.DateTimeField(blank=True, null=True)),
                 ('order', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='payment_invoices', to='orders.order')),
+                ('shop', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='payment_invoices', to='shops.shop')),
             ],
         ),
         migrations.AddIndex(
@@ -91,7 +92,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='ordertransitionlog',
-            index=models.Index(fields=['order', 'created_at'], name='ordertransition_order_created_idx'),
+            index=models.Index(fields=['order', 'created_at'], name='ordtrans_order_created_idx'),
         ),
         migrations.AddIndex(
             model_name='paymentinvoice',

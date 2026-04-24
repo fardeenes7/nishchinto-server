@@ -30,6 +30,8 @@ urlpatterns = [
     path('api/v1/shops/', include('shops.api.urls')),
     path('api/v1/catalog/', include('catalog.api.urls')),
     path('api/v1/storefront/', include(storefront_urlpatterns + order_storefront_urlpatterns)),
+    path('api/v1/webhooks/', include('webhooks.api.urls')),
+    path('api/v1/compliance/', include('compliance.api.urls')),
     path('api/v1/media/', include('media.api.urls')),
     # path('api/v1/users/', include('users.api.urls')),
 ]

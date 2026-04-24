@@ -78,6 +78,7 @@ class OrderItem(TenantModel):
 class PaymentInvoice(TenantModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     order = models.ForeignKey('orders.Order', on_delete=models.CASCADE, related_name='payment_invoices')
+    shop = models.ForeignKey('shops.Shop', on_delete=models.CASCADE, related_name='payment_invoices')
     token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     expires_at = models.DateTimeField()
     is_used = models.BooleanField(default=False)
@@ -86,6 +87,8 @@ class PaymentInvoice(TenantModel):
     def save(self, *args, **kwargs):
         if not self.tenant_id:
             self.tenant_id = self.order.tenant_id
+        if not self.shop_id:
+            self.shop_id = self.order.shop_id
         super().save(*args, **kwargs)
 
     class Meta:
@@ -106,5 +109,88 @@ class OrderTransitionLog(models.Model):
 
     class Meta:
         indexes = [
-            models.Index(fields=['order', 'created_at'], name='ordertransition_order_created_idx'),
+            models.Index(fields=['order', 'created_at'], name='ordtrans_order_created_idx'),
+        ]
+
+
+class OrderSplitMode(models.TextChoices):
+    BACKORDER_SPLIT = 'BACKORDER_SPLIT', 'Backorder Split'
+    ITEM_CANCEL = 'ITEM_CANCEL', 'Item Cancel'
+
+
+class OrderSplitLink(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    parent_order = models.ForeignKey('orders.Order', on_delete=models.CASCADE, related_name='split_links_as_parent')
+    child_order = models.ForeignKey('orders.Order', on_delete=models.CASCADE, related_name='split_links_as_child')
+    split_mode = models.CharField(max_length=20, choices=OrderSplitMode.choices, default=OrderSplitMode.BACKORDER_SPLIT)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['parent_order', 'created_at'], name='ordsplit_parent_created_ix'),
+            models.Index(fields=['child_order', 'created_at'], name='ordsplit_child_created_ix'),
+        ]
+
+
+class OrderRefundStatus(models.TextChoices):
+    REQUESTED = 'REQUESTED', 'Requested'
+    COMPLETED = 'COMPLETED', 'Completed'
+
+
+class OrderRefundEvent(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    order = models.ForeignKey('orders.Order', on_delete=models.CASCADE, related_name='refund_events')
+    shop = models.ForeignKey('shops.Shop', on_delete=models.CASCADE, related_name='order_refund_events')
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    currency = models.CharField(max_length=3, default='BDT')
+    status = models.CharField(max_length=20, choices=OrderRefundStatus.choices, default=OrderRefundStatus.REQUESTED)
+    reason = models.CharField(max_length=255, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    actor_user = models.ForeignKey('users.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='order_refund_events')
+    inventory_reversed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['shop', 'order', 'created_at'], name='ordrefund_shop_ord_cr_idx'),
+            models.Index(fields=['shop', 'status', 'created_at'], name='ordrefund_shop_st_cr_idx'),
+        ]
+
+
+class CourierProvider(models.TextChoices):
+    PATHAO = 'PATHAO', 'Pathao'
+    PAPERFLY = 'PAPERFLY', 'Paperfly'
+    STEADFAST = 'STEADFAST', 'Steadfast'
+    OTHER = 'OTHER', 'Other'
+
+
+class CourierConsignmentStatus(models.TextChoices):
+    CREATED = 'CREATED', 'Created'
+    DISPATCHED = 'DISPATCHED', 'Dispatched'
+    IN_TRANSIT = 'IN_TRANSIT', 'In Transit'
+    DELIVERED = 'DELIVERED', 'Delivered'
+    FAILED = 'FAILED', 'Failed'
+    RTO = 'RTO', 'Return To Origin'
+
+
+class CourierConsignment(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    order = models.ForeignKey('orders.Order', on_delete=models.CASCADE, related_name='consignments')
+    shop = models.ForeignKey('shops.Shop', on_delete=models.CASCADE, related_name='courier_consignments')
+    provider = models.CharField(max_length=20, choices=CourierProvider.choices, default=CourierProvider.OTHER)
+    external_consignment_id = models.CharField(max_length=120)
+    tracking_code = models.CharField(max_length=120, blank=True)
+    status = models.CharField(max_length=20, choices=CourierConsignmentStatus.choices, default=CourierConsignmentStatus.CREATED)
+    payload = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['shop', 'status', 'created_at'], name='courier_shop_stat_cr_ix'),
+            models.Index(fields=['provider', 'external_consignment_id'], name='courier_prov_ext_idx'),
+        ]
+        constraints = [
+            models.UniqueConstraint(fields=['provider', 'external_consignment_id'], name='uq_courier_provider_extid'),
         ]

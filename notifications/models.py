@@ -47,7 +47,7 @@ class NotificationDeliveryLog(models.Model):
 
     class Meta:
         indexes = [
-            models.Index(fields=['shop', 'status', 'created_at'], name='notiflog_shop_status_created_idx'),
+            models.Index(fields=['shop', 'status', 'created_at'], name='notif_shop_status_created_ix'),
         ]
 
 

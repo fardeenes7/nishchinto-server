@@ -209,7 +209,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='inventorylog',
-            index=models.Index(fields=['shop', 'variant', 'created_at'], name='invlog_shop_variant_created_idx'),
+            index=models.Index(fields=['shop', 'variant', 'created_at'], name='invlog_shop_var_created_idx'),
         ),
         migrations.AddIndex(
             model_name='inventorylog',

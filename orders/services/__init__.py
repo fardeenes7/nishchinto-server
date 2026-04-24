@@ -1,4 +1,8 @@
 from orders.services.checkout import checkout_create_order
+from orders.services.courier import (
+    courier_apply_status_from_webhook,
+    courier_consignment_upsert,
+)
 from orders.services.invoices import (
     PaymentInvoiceGoneError,
     PaymentInvoiceNotFoundError,
@@ -7,10 +11,22 @@ from orders.services.invoices import (
     payment_invoice_create,
     payment_invoice_get_for_shop,
 )
+from orders.services.partial_fulfillment import (
+    PartialInventoryReversalResult,
+    PartialRefundResult,
+    OptimisticLockError,
+    PartialFulfillmentError,
+    partial_inventory_reversal_apply,
+    partial_fulfillment_cancel_items,
+    partial_fulfillment_split_order,
+    partial_refund_create,
+)
 from orders.services.transitions import order_transition
 
 __all__ = [
     'checkout_create_order',
+    'courier_consignment_upsert',
+    'courier_apply_status_from_webhook',
     'order_transition',
     'payment_invoice_assert_active',
     'payment_invoice_create',
@@ -18,4 +34,12 @@ __all__ = [
     'payment_invoice_get_for_shop',
     'PaymentInvoiceNotFoundError',
     'PaymentInvoiceGoneError',
+    'partial_fulfillment_split_order',
+    'partial_fulfillment_cancel_items',
+    'partial_refund_create',
+    'partial_inventory_reversal_apply',
+    'PartialFulfillmentError',
+    'OptimisticLockError',
+    'PartialRefundResult',
+    'PartialInventoryReversalResult',
 ]
