@@ -8,6 +8,7 @@ from shops.models import ShopMember, ShopSettings, StoreTheme
 from .serializers import ShopSerializer, ActiveShopContextSerializer, ShopSettingsSerializer, ShopTrackingConfigSerializer, StoreThemeSerializer
 from shops.models import ShopSettings
 from catalog.models import ShopTrackingConfig
+from billing.services.subscription import get_subscription_context
 
 
 class ShopDetailView(APIView):
@@ -92,6 +93,7 @@ class ActiveShopContextView(APIView):
                 payload = {
                     "shop": tenant_membership.shop,
                     "role": tenant_membership.role,
+                    "subscription": get_subscription_context(tenant_membership.shop),
                 }
                 return Response(ActiveShopContextSerializer(payload).data)
 
@@ -112,6 +114,7 @@ class ActiveShopContextView(APIView):
         payload = {
             "shop": membership.shop,
             "role": membership.role,
+            "subscription": get_subscription_context(membership.shop),
         }
         return Response(ActiveShopContextSerializer(payload).data)
 

@@ -10,7 +10,10 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, Spec
 
 from users.api.sso_views import SSOHubView
 from catalog.api.urls import storefront_urlpatterns
-from orders.api.urls import storefront_urlpatterns as order_storefront_urlpatterns
+from orders.api.urls import (
+    storefront_urlpatterns as order_storefront_urlpatterns,
+    dashboard_urlpatterns as order_dashboard_urlpatterns
+)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -29,10 +32,12 @@ urlpatterns = [
     path('api/v1/marketing/', include('marketing.api.urls')),
     path('api/v1/shops/', include('shops.api.urls')),
     path('api/v1/catalog/', include('catalog.api.urls')),
+    path('api/v1/orders/', include(order_dashboard_urlpatterns)),
     path('api/v1/storefront/', include(storefront_urlpatterns + order_storefront_urlpatterns)),
     path('api/v1/webhooks/', include('webhooks.api.urls')),
     path('api/v1/compliance/', include('compliance.api.urls')),
     path('api/v1/media/', include('media.api.urls')),
     path('api/v1/messenger/', include('messenger.api.urls')),
+    path('api/v1/billing/', include('billing.api.urls')),
     # path('api/v1/users/', include('users.api.urls')),
 ]

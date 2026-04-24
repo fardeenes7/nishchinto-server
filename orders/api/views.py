@@ -90,3 +90,33 @@ class StorefrontPaymentInvoiceCodConfirmView(StorefrontPaymentInvoiceBaseView):
                 "invoice_token": invoice.token,
             }
         )
+
+from rest_framework.permissions import IsAuthenticated
+from shops.api.views import ShopDetailView
+
+class POSCheckoutView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["dashboard", "pos"],
+        summary="Process a retail sale from the POS",
+    )
+    def post(self, request):
+        shop_id = ShopDetailView()._resolve_shop_id(request)
+        from orders.services.pos import POSService
+        
+        service = POSService(shop_id)
+        
+        items = request.data.get('items', [])
+        payments = request.data.get('payments', [])
+        customer_id = request.data.get('customer_id')
+        
+        try:
+            order = service.process_pos_sale(items, payments, customer_id)
+            return Response({
+                "id": order.id,
+                "total": order.total_amount,
+                "status": order.status
+            }, status=status.HTTP_201_CREATED)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

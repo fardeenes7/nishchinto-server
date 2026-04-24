@@ -54,6 +54,10 @@ class ProductVariant(TenantModel):
         null=True, blank=True,
         help_text="Overrides master product weight if set"
     )
+    purchase_price_override = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        help_text="Overrides master purchase_price if set"
+    )
 
     # ── Inventory ──────────────────────────────────────────────────────────
     stock_quantity = models.PositiveIntegerField(default=0)
@@ -100,3 +104,8 @@ class ProductVariant(TenantModel):
             if self.weight_override_grams is not None
             else self.product.weight_grams
         )
+
+    @property
+    def effective_purchase_price(self):
+        """Returns variant purchase_price if overridden, else master product purchase_price."""
+        return self.purchase_price_override if self.purchase_price_override is not None else self.product.purchase_price

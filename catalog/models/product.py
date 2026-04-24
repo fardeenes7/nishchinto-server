@@ -60,6 +60,10 @@ class Product(TenantModel):
     compare_at_price = models.DecimalField(
         max_digits=10, decimal_places=2, null=True, blank=True
     )
+    purchase_price = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0,
+        help_text="Default COGS for profit calculation"
+    )
     # Tax rate stored as decimal fraction: 0.15 = 15%.
     # Applied at item level to avoid rounding errors on order totals.
     tax_rate = models.DecimalField(

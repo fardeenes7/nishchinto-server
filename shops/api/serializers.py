@@ -16,6 +16,7 @@ class ShopSerializer(serializers.ModelSerializer):
 class ActiveShopContextSerializer(serializers.Serializer):
     shop = ShopSerializer()
     role = serializers.ChoiceField(choices=ShopMember.ROLE_CHOICES)
+    subscription = serializers.JSONField()
 
 
 class ShopSettingsSerializer(serializers.ModelSerializer):

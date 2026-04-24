@@ -70,6 +70,8 @@ INSTALLED_APPS = [
     'media.apps.MediaConfig',
     'catalog',
     'messenger',
+    'billing',
+    'accounting',
 ]
 
 SITE_ID = 1
@@ -208,6 +210,16 @@ CELERY_BEAT_SCHEDULE = {
     'refresh-social-meta-tokens': {
         'task': 'marketing.tasks.refresh_meta_tokens',
         'schedule': 60 * 60 * 6,  # Every 6 hours
+        'options': {'queue': 'default'},
+    },
+    'sweep-grace-periods-daily': {
+        'task': 'billing.tasks.subscription.sweep_grace_periods',
+        'schedule': 60 * 60 * 24,  # Every 24 hours
+        'options': {'queue': 'default'},
+    },
+    'sweep-matured-funds-daily': {
+        'task': 'accounting.tasks.sweep_matured_funds',
+        'schedule': 60 * 60 * 24,  # Every 24 hours
         'options': {'queue': 'default'},
     },
     'sweep-old-messenger-messages': {
