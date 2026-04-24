@@ -113,6 +113,26 @@ def product_update(*, product_id: str, shop_id: str, **data) -> "Product":  # no
     return product
 
 
+def product_bulk_update(*, shop_id: str, updates: list[dict]) -> int:
+    from catalog.models import Product
+
+    with transaction.atomic():
+        updated_count = 0
+        for data in updates:
+            product_id = data.pop("id", None)
+            if not product_id:
+                continue
+            try:
+                product = Product.objects.get(id=product_id, shop_id=shop_id, deleted_at__isnull=True)
+                for field, value in data.items():
+                    setattr(product, field, value)
+                product.save()
+                updated_count += 1
+            except Product.DoesNotExist:
+                continue
+    return updated_count
+
+
 def product_publish(*, product_id: str, shop_id: str) -> "Product":  # noqa: F821
     """Moves a product to PUBLISHED state. Validates at least one active variant exists."""
     from catalog.models import Product, ProductStatus
@@ -230,6 +250,49 @@ def variant_update_stock(
         )
 
     return variant
+
+
+def variant_bulk_update(
+    *,
+    shop_id: str,
+    user_id,
+    updates: list[dict]
+) -> int:
+    from catalog.models import ProductVariant, InventoryLog
+
+    with transaction.atomic():
+        updated_count = 0
+        for data in updates:
+            variant_id = data.pop("id", None)
+            if not variant_id:
+                continue
+            try:
+                # Use select_for_update if we are touching stock_quantity
+                variant = ProductVariant.objects.select_for_update().get(
+                    id=variant_id, shop_id=shop_id, deleted_at__isnull=True
+                )
+                
+                # If stock_quantity is being changed explicitly via bulk edit
+                new_stock = data.pop("stock_quantity", None)
+                if new_stock is not None and new_stock != variant.stock_quantity:
+                    delta = new_stock - variant.stock_quantity
+                    variant.stock_quantity = new_stock
+                    InventoryLog.objects.create(
+                        shop_id=shop_id,
+                        variant=variant,
+                        delta=delta,
+                        reason="BULK_ADJUSTMENT",
+                        reference_id="bulk_edit",
+                        created_by_id=user_id,
+                    )
+
+                for field, value in data.items():
+                    setattr(variant, field, value)
+                variant.save()
+                updated_count += 1
+            except ProductVariant.DoesNotExist:
+                continue
+    return updated_count
 
 
 # ─── Product Media ──────────────────────────────────────────────────────────────

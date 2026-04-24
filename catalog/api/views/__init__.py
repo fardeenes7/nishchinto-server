@@ -57,6 +57,8 @@ from catalog.services import (
     product_update,
     variant_create,
     variant_update_stock,
+    variant_bulk_update,
+    product_bulk_update,
 )
 
 logger = logging.getLogger(__name__)
@@ -222,6 +224,21 @@ class ProductViewSet(ViewSet):
         product = product_archive(product_id=pk, shop_id=shop_id)
         return Response(ProductDetailSerializer(product).data)
 
+    @extend_schema(request=ProductBulkUpdateItemSerializer(many=True), responses={200: {"type": "object", "properties": {"updated_count": {"type": "integer"}}}}, tags=["catalog"])
+    @action(detail=False, methods=["post"], url_path="bulk-update")
+    def bulk_update(self, request):
+        from catalog.api.serializers import ProductBulkUpdateItemSerializer
+        shop_id = _require_tenant(request)
+        serializer = ProductBulkUpdateItemSerializer(data=request.data, many=True)
+        serializer.is_valid(raise_exception=True)
+        try:
+            updated_count = product_bulk_update(
+                shop_id=shop_id, updates=serializer.validated_data
+            )
+        except Exception as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"updated_count": updated_count}, status=status.HTTP_200_OK)
+
 
 # ─── Variants ────────────────────────────────────────────────────────────────
 
@@ -285,6 +302,21 @@ class VariantViewSet(ViewSet):
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(ProductVariantSerializer(variant).data)
+
+    @extend_schema(request=VariantBulkUpdateItemSerializer(many=True), responses={200: {"type": "object", "properties": {"updated_count": {"type": "integer"}}}}, tags=["catalog"])
+    @action(detail=False, methods=["post"], url_path="bulk-update")
+    def bulk_update(self, request, product_pk=None):
+        from catalog.api.serializers import VariantBulkUpdateItemSerializer
+        shop_id = _require_tenant(request)
+        serializer = VariantBulkUpdateItemSerializer(data=request.data, many=True)
+        serializer.is_valid(raise_exception=True)
+        try:
+            updated_count = variant_bulk_update(
+                shop_id=shop_id, user_id=request.user.id, updates=serializer.validated_data
+            )
+        except Exception as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"updated_count": updated_count}, status=status.HTTP_200_OK)
 
 
 # ─── Tracking Config ────────────────────────────────────────────────────────

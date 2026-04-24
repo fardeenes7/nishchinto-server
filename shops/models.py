@@ -90,6 +90,16 @@ class ShopSettings(TenantModel):
     operational controls.
     """
 
+    TAX_CALCULATION_CHOICES = (
+        ('ORIGINAL', 'Calculate Tax on Original Price'),
+        ('DISCOUNTED', 'Calculate Tax on Discounted Price'),
+    )
+    
+    DISCOUNT_APPLICATION_CHOICES = (
+        ('EXCLUSIVE', 'Discount is Exclusive of Tax'),
+        ('INCLUSIVE', 'Discount is Inclusive of Tax'),
+    )
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     shop = models.OneToOneField(Shop, on_delete=models.CASCADE, related_name='settings')
 
@@ -103,6 +113,12 @@ class ShopSettings(TenantModel):
     sms_enabled = models.BooleanField(default=False)
     sms_balance_credits = models.PositiveIntegerField(default=0)
     notification_targets = models.JSONField(default=list, blank=True)
+
+    # Storefront Toggles
+    show_stock_count = models.BooleanField(default=True)
+    enable_product_reviews = models.BooleanField(default=True)
+    tax_calculation_base = models.CharField(max_length=20, choices=TAX_CALCULATION_CHOICES, default='DISCOUNTED')
+    discount_application = models.CharField(max_length=20, choices=DISCOUNT_APPLICATION_CHOICES, default='EXCLUSIVE')
 
     messenger_context_window_size = models.PositiveIntegerField(default=20)
     messenger_human_takeover_ttl_minutes = models.PositiveIntegerField(default=30)

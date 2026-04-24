@@ -70,6 +70,14 @@ class ProductVariantWriteSerializer(serializers.Serializer):
     image_id = serializers.UUIDField(required=False, allow_null=True)
     is_active = serializers.BooleanField(default=True)
 
+class VariantBulkUpdateItemSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    price_override = serializers.DecimalField(
+        max_digits=10, decimal_places=2, required=False, allow_null=True
+    )
+    stock_quantity = serializers.IntegerField(required=False, min_value=0)
+    is_active = serializers.BooleanField(required=False)
+
 
 class StockAdjustSerializer(serializers.Serializer):
     delta = serializers.IntegerField(help_text="Positive = add stock, negative = reduce")
@@ -169,6 +177,18 @@ class ProductWriteSerializer(serializers.Serializer):
     seo_title = serializers.CharField(max_length=120, default="", allow_blank=True)
     seo_description = serializers.CharField(max_length=320, default="", allow_blank=True)
     sort_order = serializers.IntegerField(default=0)
+
+
+class ProductBulkUpdateItemSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    base_price = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
+    compare_at_price = serializers.DecimalField(
+        max_digits=10, decimal_places=2, required=False, allow_null=True
+    )
+    tax_rate = serializers.DecimalField(max_digits=5, decimal_places=4, required=False)
+    status = serializers.ChoiceField(
+        choices=["DRAFT", "PUBLISHED", "SCHEDULED", "ARCHIVED"], required=False
+    )
 
 
 # ─── Tracking Config ────────────────────────────────────────────────────────────
