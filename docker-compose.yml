@@ -7,7 +7,7 @@
 services:
     # ── Infrastructure ───────────────────────────────────────────────────────────
     db:
-        image: postgres:16
+        image: pgvector/pgvector:pg16
         platform: linux/amd64
         restart: unless-stopped
         environment:
@@ -38,10 +38,11 @@ services:
         environment:
             - PGBOUNCER_DATABASE=nishchinto
             - PGBOUNCER_PORT=5432
-            - PGBOUNCER_AUTH_TYPE=scram-sha-256
+            - PGBOUNCER_AUTH_TYPE=md5
             - POSTGRESQL_HOST=db
             - POSTGRESQL_USER=${PGBOUNCER_DB_USER}
             - POSTGRESQL_PASSWORD=${PGBOUNCER_DB_PASSWORD}
+            - PGBOUNCER_USERLIST="${PGBOUNCER_DB_USER}" "${PGBOUNCER_DB_PASSWORD}"
             - PGBOUNCER_MAX_CLIENT_CONN=500
             - PGBOUNCER_POOL_MODE=transaction
         depends_on:

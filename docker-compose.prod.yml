@@ -8,7 +8,7 @@ services:
 
   # ── Infrastructure ───────────────────────────────────────────────────────────
   db:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16-alpine
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -39,6 +39,9 @@ services:
       - POSTGRESQL_HOST=db
       - POSTGRESQL_USER=${PGBOUNCER_DB_USER}
       - POSTGRESQL_PASSWORD=${PGBOUNCER_DB_PASSWORD}
+      - PGBOUNCER_ADMIN_USER=${PGBOUNCER_DB_USER}
+      - PGBOUNCER_ADMIN_PASSWORD=${PGBOUNCER_DB_PASSWORD}
+      - PGBOUNCER_USERLIST="${PGBOUNCER_DB_USER}" "${PGBOUNCER_DB_PASSWORD}"
       - PGBOUNCER_MAX_CLIENT_CONN=${PGBOUNCER_MAX_CLIENT_CONN}
       - PGBOUNCER_POOL_MODE=${PGBOUNCER_POOL_MODE}
     depends_on:

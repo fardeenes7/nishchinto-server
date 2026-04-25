@@ -42,4 +42,7 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
 
 	-- 6. Grant read-only access to pgbouncer for its own needs (if any)
 	-- Usually pgbouncer doesn't need data access, just connect.
+
+	-- 7. Enable pgvector
+	CREATE EXTENSION IF NOT EXISTS vector;
 EOSQL

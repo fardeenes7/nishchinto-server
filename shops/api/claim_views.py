@@ -3,6 +3,9 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from shops.models import Shop, SubscriptionPlan, ShopMember
 from django.db import transaction
+from django.conf import settings
+
+
 
 class ShopCreateSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=255)
@@ -32,7 +35,6 @@ class ShopCreateView(generics.CreateAPIView):
         if Shop.objects.filter(subdomain=subdomain).exists():
             return Response({'detail': 'Subdomain already taken.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        from django.conf import settings
         if subdomain in settings.SUBDOMAIN_BLACKLIST:
              return Response({'detail': 'Subdomain is reserved.'}, status=status.HTTP_400_BAD_REQUEST)
 
