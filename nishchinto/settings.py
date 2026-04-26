@@ -180,6 +180,13 @@ SIMPLE_JWT = {
     'USER_ID_CLAIM': 'user_id',
 }
 
+# REST Auth JWT settings
+REST_USE_JWT = True
+JWT_AUTH_COOKIE = 'nishchinto-auth'
+JWT_AUTH_REFRESH_COOKIE = 'nishchinto-refresh-token'
+JWT_AUTH_HTTPONLY = True # Disable JS access to the cookie for security
+
+
 # SPECTACULAR
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Nishchinto SaaS API',
@@ -264,6 +271,11 @@ SOCIALACCOUNT_PROVIDERS = {
         'SCOPE': ['profile', 'email'],
         'AUTH_PARAMS': {'access_type': 'online'},
         'OAUTH_PKCE_ENABLED': True,
+        'APP': {
+            'client_id': env('GOOGLE_CLIENT_ID', default=''),
+            'secret': env('GOOGLE_CLIENT_SECRET', default=''),
+            'key': ''
+        }
     }
 }
 

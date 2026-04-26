@@ -9,6 +9,7 @@ from rest_framework_simplejwt.views import (
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
 from users.api.sso_views import SSOHubView
+from users.api.social_views import GoogleLogin
 from catalog.api.urls import storefront_urlpatterns
 from orders.api.urls import (
     storefront_urlpatterns as order_storefront_urlpatterns,
@@ -19,9 +20,18 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('sso/hub/', SSOHubView.as_view(), name='sso_hub'),
 
-    # Global Auth Token endpoints
+    # Global Auth & Social Login endpoints
     path('api/v1/auth/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/v1/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    
+    # dj-rest-auth for login/logout/user
+    path('api/v1/auth/', include('dj_rest_auth.urls')),
+    
+    # Social Login (Google)
+    path('api/v1/auth/google/', GoogleLogin.as_view(), name='google_login'),
+    
+    # allauth standard views (required for callback and session flow)
+    path('accounts/', include('allauth.urls')),
     
     # OpenAPI Schema Configuration
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
