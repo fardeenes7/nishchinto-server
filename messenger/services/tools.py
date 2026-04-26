@@ -364,12 +364,26 @@ def _confirm_order(
     from orders.services.checkout import checkout_create_order
     from orders.services.transitions import order_transition
     from messenger.services.bot_state import bot_state_clear_order_draft
+    from fraud.services.risk import check_customer_risk
+    from fraud.models import FraudConfig
+    from shops.models import Shop
 
     items = [{
         "product_id": draft["product_id"],
         "variant_id": draft.get("variant_id"),
         "quantity": draft["quantity"],
     }]
+
+    # Check fraud risk
+    try:
+        shop = Shop.objects.get(id=shop_id)
+        risk = check_customer_risk(shop, shipping_address.get("phone"))
+        fraud_config, _ = FraudConfig.objects.get_or_create(shop=shop)
+        
+        if risk["is_high_risk"] and fraud_config.block_high_risk:
+            return {"error": "This phone number is flagged for high risk. COD is currently disabled for this number."}
+    except Shop.DoesNotExist:
+        return {"error": "Shop not found."}
 
     try:
         order = checkout_create_order(

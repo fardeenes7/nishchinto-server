@@ -49,8 +49,26 @@ class StorefrontPaymentInvoiceDetailView(StorefrontPaymentInvoiceBaseView):
 
         serializer = PaymentInvoicePublicSerializer(invoice)
         payload = serializer.data
+        
+        # Check fraud risk for warning
+        from fraud.services.risk import check_customer_risk
+        from fraud.models import FraudConfig
+        
+        customer_phone = ""
+        if invoice.order.customer_profile:
+            customer_phone = invoice.order.customer_profile.phone_number
+            
+        risk = check_customer_risk(shop, customer_phone)
+        fraud_config, _ = FraudConfig.objects.get_or_create(shop=shop)
+        
+        payload["fraud_risk"] = risk
         payload["payment_methods"] = [
-            {"code": "COD", "label": "Cash on Delivery", "enabled": True},
+            {
+                "code": "COD", 
+                "label": "Cash on Delivery", 
+                "enabled": not (risk['is_high_risk'] and fraud_config.block_high_risk),
+                "warning": "High RTO risk detected" if risk['is_high_risk'] else None
+            },
             {"code": "ONLINE", "label": "Pay Online", "enabled": False},
         ]
         return Response(payload)
@@ -70,11 +88,32 @@ class StorefrontPaymentInvoiceCodConfirmView(StorefrontPaymentInvoiceBaseView):
             return Response({"detail": "Shop not found."}, status=status.HTTP_404_NOT_FOUND)
 
         try:
-            invoice = payment_invoice_consume(token=token, shop_id=str(shop.id))
+            invoice = payment_invoice_get_for_shop(token=token, shop_id=str(shop.id))
+            payment_invoice_assert_active(invoice=invoice)
         except PaymentInvoiceNotFoundError:
             return Response({"detail": "Payment invoice not found."}, status=status.HTTP_404_NOT_FOUND)
         except PaymentInvoiceGoneError as exc:
             return Response({"detail": f"Payment invoice is {exc.args[0]}."}, status=status.HTTP_410_GONE)
+
+        # Check fraud risk before consuming
+        from fraud.services.risk import check_customer_risk
+        from fraud.models import FraudConfig
+        
+        customer_phone = ""
+        if invoice.order.customer_profile:
+            customer_phone = invoice.order.customer_profile.phone_number
+            
+        risk = check_customer_risk(shop, customer_phone)
+        fraud_config, _ = FraudConfig.objects.get_or_create(shop=shop)
+        
+        if risk['is_high_risk'] and fraud_config.block_high_risk:
+            return Response(
+                {"detail": "This number is flagged for high RTO risk. COD is disabled for this purchase."}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Consume token
+        invoice = payment_invoice_consume(token=token, shop_id=str(shop.id))
 
         if invoice.order.status in {"PENDING", "AWAITING_PAYMENT"}:
             order_transition(

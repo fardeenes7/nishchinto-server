@@ -2,6 +2,7 @@ from rest_framework import generics, status, serializers
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from shops.models import Shop, SubscriptionPlan, ShopMember
+from affiliates.models import Referral
 from django.db import transaction
 from django.conf import settings
 
@@ -10,6 +11,7 @@ from django.conf import settings
 class ShopCreateSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=255)
     subdomain = serializers.CharField(max_length=100)
+    ref = serializers.CharField(max_length=100, required=False, allow_null=True)
 
 class ShopCreateView(generics.CreateAPIView):
     """
@@ -25,6 +27,7 @@ class ShopCreateView(generics.CreateAPIView):
         
         subdomain = serializer.validated_data['subdomain'].lower()
         name = serializer.validated_data['name']
+        ref_subdomain = serializer.validated_data.get('ref') or request.COOKIES.get('nishchinto_ref')
         user = request.user
 
         # 1. Check if user already owns a shop (Nishchinto is 1-shop-per-user for now)
@@ -37,6 +40,10 @@ class ShopCreateView(generics.CreateAPIView):
 
         if subdomain in settings.SUBDOMAIN_BLACKLIST:
              return Response({'detail': 'Subdomain is reserved.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        referrer_shop = None
+        if ref_subdomain:
+            referrer_shop = Shop.objects.filter(subdomain=ref_subdomain).first()
 
         with transaction.atomic():
             # 3. Assign Default Free Plan
@@ -55,6 +62,14 @@ class ShopCreateView(generics.CreateAPIView):
                 shop=shop,
                 role='OWNER'
             )
+
+            # 6. Track Referral
+            if referrer_shop:
+                Referral.objects.create(
+                    referrer_shop=referrer_shop,
+                    referred_shop=shop,
+                    status='PENDING'
+                )
             
         return Response({
             'detail': 'Shop created successfully!', 

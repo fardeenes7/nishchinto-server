@@ -26,6 +26,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = env('SECRET_KEY', default='django-insecure-default-key-for-dev')
 DEBUG = env('DEBUG')
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['*'])
+WEB_URL = env('WEB_URL', default='http://localhost:3000')
 
 # Application definition
 INSTALLED_APPS = [
@@ -72,6 +73,9 @@ INSTALLED_APPS = [
     'messenger',
     'billing',
     'accounting',
+    'analytics',
+    'affiliates',
+    'fraud',
 ]
 
 SITE_ID = 1
@@ -232,6 +236,11 @@ CELERY_BEAT_SCHEDULE = {
     'sweep-old-messenger-messages': {
         'task': 'messenger.tasks.sweep_old_messages',
         'schedule': 60 * 60 * 24,  # Every 24 hours (30-day retention policy)
+        'options': {'queue': 'default'},
+    },
+    'refresh-analytics-views-hourly': {
+        'task': 'analytics.tasks.refresh_analytics_materialized_views',
+        'schedule': 60 * 60,  # Every hour
         'options': {'queue': 'default'},
     },
 }

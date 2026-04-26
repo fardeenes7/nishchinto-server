@@ -50,5 +50,7 @@ urlpatterns = [
     path('api/v1/messenger/', include('messenger.api.urls')),
     path('api/v1/billing/', include('billing.api.urls')),
     path('api/v1/accounting/', include('accounting.api.urls')),
-    # path('api/v1/users/', include('users.api.urls')),
+    path('api/v1/analytics/', include('analytics.api.urls')),
+    path('api/v1/affiliates/', include('affiliates.api.urls')),
+    path('api/v1/fraud/', include('fraud.api.urls')),
 ]
