@@ -19,6 +19,8 @@ from webhooks.models import WebhookProvider, WebhookProcessingStatus
 
 logger = logging.getLogger(__name__)
 
+from messenger.services.send_api import reply_to_comment, send_generic_template
+
 _COMMENT_REPLY_TEXT = "Price sent to your inbox! 💌"
 _STOCK_ZERO_REPLY = "This item is currently out of stock. Stay tuned! 🙏"
 
@@ -51,7 +53,7 @@ def handle_comment_auto_reply(
     )
     all_out_of_stock = all(p.total_stock <= 0 for p in products) if products else True
 
-    from messenger.services.send_api import reply_to_comment, send_generic_template
+
 
     if all_out_of_stock:
         # Post a public out-of-stock comment and freeze — do NOT send DM

@@ -1,5 +1,4 @@
-# shops/services.py
-from .models import Shop, ShopMember
+from shops.models import Shop, ShopMember
 from django.db import transaction
 from django.conf import settings
 from django.core.exceptions import ValidationError

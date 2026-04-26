@@ -16,6 +16,7 @@ Endpoints:
 from __future__ import annotations
 
 import logging
+import time
 
 from django.conf import settings
 from django.http import HttpResponse
@@ -29,10 +30,15 @@ from messenger.api.serializers import (
     ConversationListSerializer,
     FAQEntrySerializer,
     HumanTakeoverSerializer,
-    MessengerMessageSerializer,
 )
-from messenger.models import FAQEntry, MessengerMessage
+from messenger.models import FAQEntry, MessengerMessage, MessageDirection
 from messenger.selectors import conversation_list_for_shop, message_list_for_psid
+
+from webhooks.services import webhook_signature_valid
+from messenger.tasks import process_inbound_message, embed_faq_entry
+from marketing.models import SocialConnection
+from messenger.services.bot_state import bot_state_set_human_active, bot_state_clear_human_active
+from messenger.services.send_api import send_text
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +53,6 @@ def _get_shop_id(request) -> str:
 
 def _get_page_token(shop_id: str, page_id: str) -> str | None:
     """Fetch the Page Access Token for the given page from SocialConnection."""
-    from marketing.models import SocialConnection
     try:
         conn = SocialConnection.objects.get(
             shop_id=shop_id,
@@ -84,9 +89,6 @@ class MetaWebhookView(APIView):
         - Returns HTTP 200 immediately (Meta requires < 5s response).
         - Fans out each messaging event as a separate Celery task.
         """
-        from webhooks.services import webhook_signature_valid
-        from messenger.tasks import process_inbound_message
-
         signature = request.headers.get("X-Hub-Signature-256", "")
         body = request.body
 
@@ -103,7 +105,6 @@ class MetaWebhookView(APIView):
 
             # Resolve shop from page_id
             try:
-                from marketing.models import SocialConnection
                 conn = SocialConnection.objects.get(page_id=page_id, deleted_at__isnull=True)
                 shop_id = str(conn.shop_id)
                 page_access_token = conn.access_token
@@ -210,8 +211,6 @@ class HumanTakeoverView(APIView):
         psid = d["psid"]
         action = d["action"]
 
-        from messenger.services.bot_state import bot_state_set_human_active, bot_state_clear_human_active
-
         if action == "takeover":
             bot_state_set_human_active(page_id=page_id, psid=psid, ttl_minutes=30)
             return Response({"status": "human_active"})
@@ -239,10 +238,6 @@ class AgentSendView(APIView):
         token = _get_page_token(shop_id=shop_id, page_id=page_id)
         if not token:
             return Response({"detail": "Page access token not found."}, status=status.HTTP_400_BAD_REQUEST)
-
-        from messenger.services.send_api import send_text
-        import time
-        from messenger.models import MessageDirection
 
         try:
             result = send_text(psid=psid, text=text, token=token)
@@ -281,7 +276,6 @@ class FAQListCreateView(APIView):
         serializer.is_valid(raise_exception=True)
         entry = serializer.save(shop_id=shop_id, tenant_id=shop_id)
         # Trigger async embedding generation
-        from messenger.tasks import embed_faq_entry
         embed_faq_entry.delay(faq_entry_id=str(entry.id))
         return Response(FAQEntrySerializer(entry).data, status=status.HTTP_201_CREATED)
 
@@ -304,7 +298,6 @@ class FAQDetailView(APIView):
         serializer.is_valid(raise_exception=True)
         entry = serializer.save()
         # Re-embed on content change
-        from messenger.tasks import embed_faq_entry
         embed_faq_entry.delay(faq_entry_id=str(entry.id))
         return Response(FAQEntrySerializer(entry).data)
 

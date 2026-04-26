@@ -1,10 +1,16 @@
-from django.urls import path
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
 
 from orders.api.views import (
     StorefrontPaymentInvoiceCodConfirmView,
     StorefrontPaymentInvoiceDetailView,
-    POSCheckoutView
+    StorefrontCheckoutView,
+    POSCheckoutView,
+    OrderViewSet,
 )
+
+router = DefaultRouter()
+router.register(r'', OrderViewSet, basename='order')
 
 storefront_urlpatterns = [
     path(
@@ -17,6 +23,11 @@ storefront_urlpatterns = [
         StorefrontPaymentInvoiceCodConfirmView.as_view(),
         name="storefront-payment-invoice-cod-confirm",
     ),
+    path(
+        "<slug:shop_slug>/checkout/",
+        StorefrontCheckoutView.as_view(),
+        name="storefront-checkout",
+    ),
 ]
 
 dashboard_urlpatterns = [
@@ -25,4 +36,5 @@ dashboard_urlpatterns = [
         POSCheckoutView.as_view(),
         name="pos-checkout",
     ),
+    path("", include(router.urls)),
 ]

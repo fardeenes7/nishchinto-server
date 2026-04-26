@@ -1,6 +1,8 @@
 from rest_framework import serializers
 
 from orders.models import Order, OrderItem, PaymentInvoice
+from shops.models import CustomerProfile
+
 
 
 class PaymentInvoiceOrderItemSerializer(serializers.ModelSerializer):
@@ -60,3 +62,61 @@ class PaymentInvoiceCodConfirmResponseSerializer(serializers.Serializer):
     order_id = serializers.UUIDField()
     order_status = serializers.CharField()
     invoice_token = serializers.UUIDField()
+
+
+class CustomerShortSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomerProfile
+        fields = ["id", "full_name", "phone_number", "email"]
+
+
+class OrderListSerializer(serializers.ModelSerializer):
+    customer = CustomerShortSerializer(source="customer_profile", read_only=True)
+    item_count = serializers.IntegerField(source="items.count", read_only=True)
+
+    class Meta:
+        model = Order
+        fields = [
+            "id",
+            "short_id",
+            "status",
+            "total_amount",
+            "currency",
+            "customer",
+            "item_count",
+            "created_at",
+            "updated_at",
+        ]
+
+
+class OrderDetailSerializer(serializers.ModelSerializer):
+    customer = CustomerShortSerializer(source="customer_profile", read_only=True)
+    items = PaymentInvoiceOrderItemSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Order
+        fields = [
+            "id",
+            "short_id",
+            "status",
+            "total_amount",
+            "subtotal_amount",
+            "shipping_amount",
+            "discount_amount",
+            "tax_amount",
+            "currency",
+            "customer",
+            "shipping_address",
+            "billing_address",
+            "customer_note",
+            "admin_note",
+            "items",
+            "created_at",
+            "updated_at",
+        ]
+
+
+class OrderStatusTransitionSerializer(serializers.Serializer):
+    to_status = serializers.CharField()
+    reason = serializers.CharField(required=False, allow_blank=True)
+

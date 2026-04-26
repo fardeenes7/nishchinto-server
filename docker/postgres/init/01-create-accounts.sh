@@ -45,4 +45,12 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
 
 	-- 7. Enable pgvector
 	CREATE EXTENSION IF NOT EXISTS vector;
+
+	-- 8. Refresh collation version fingerprints to match the running glibc.
+	--    The postgres_data volume may have been initialized by a different image
+	--    version. This is harmless if already matching; it suppresses the
+	--    "collation version mismatch" WARNING that would otherwise spam logs.
+	ALTER DATABASE postgres   REFRESH COLLATION VERSION;
+	ALTER DATABASE template1  REFRESH COLLATION VERSION;
+	ALTER DATABASE "$POSTGRES_DB" REFRESH COLLATION VERSION;
 EOSQL

@@ -339,7 +339,12 @@ class CommentAutoReplyDedupTests(TestCase):
         product = Product.objects.create(
             shop=self.shop, tenant_id=self.shop.id, name="T-shirt",
             base_price="500.00", slug="tshirt", category=cat,
-            total_stock=10, status=ProductStatus.PUBLISHED,
+            status=ProductStatus.PUBLISHED,
+        )
+        from catalog.models import ProductVariant
+        ProductVariant.objects.create(
+            shop=self.shop, tenant_id=self.shop.id, product=product,
+            stock_quantity=10, is_active=True,
         )
 
         kwargs = dict(
@@ -373,7 +378,7 @@ class CommentAutoReplyDedupTests(TestCase):
         product = Product.objects.create(
             shop=self.shop, tenant_id=self.shop.id, name="OOS Product",
             base_price="200.00", slug="oos-product", category=cat,
-            total_stock=0, status=ProductStatus.PUBLISHED,
+            status=ProductStatus.PUBLISHED,
         )
 
         result = handle_comment_auto_reply(

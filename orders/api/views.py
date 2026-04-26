@@ -3,6 +3,11 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+from shops.api.views import ShopDetailView
+from rest_framework import viewsets
+from rest_framework.decorators import action
+from orders.models import Order
 
 from orders.api.serializers import (
     PaymentInvoiceCodConfirmResponseSerializer,
@@ -16,6 +21,13 @@ from orders.services import (
     payment_invoice_get_for_shop,
     order_transition,
 )
+from orders.api.serializers import (
+    OrderListSerializer,
+    OrderDetailSerializer,
+    OrderStatusTransitionSerializer,
+)
+
+
 from shops.models import Shop
 
 
@@ -130,8 +142,44 @@ class StorefrontPaymentInvoiceCodConfirmView(StorefrontPaymentInvoiceBaseView):
             }
         )
 
-from rest_framework.permissions import IsAuthenticated
-from shops.api.views import ShopDetailView
+
+class StorefrontCheckoutView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        tags=["storefront", "orders"],
+        summary="Create a new order from the storefront",
+    )
+    def post(self, request, shop_slug: str):
+        try:
+            shop = Shop.objects.get(subdomain=shop_slug, deleted_at__isnull=True)
+        except Shop.DoesNotExist:
+            return Response({"detail": "Shop not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        from orders.services.checkout import checkout_create_order
+        
+        items = request.data.get("items", [])
+        payment_method = request.data.get("payment_method", "COD")
+        customer_profile_id = request.data.get("customer_profile_id")
+
+        try:
+            order = checkout_create_order(
+                shop_id=str(shop.id),
+                items=items,
+                customer_profile_id=customer_profile_id,
+                payment_method=payment_method,
+            )
+            return Response({
+                "id": order.id,
+                "total": order.total_amount,
+                "status": order.status,
+                "currency": order.currency,
+            }, status=status.HTTP_201_CREATED)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+
 
 class POSCheckoutView(APIView):
     permission_classes = [IsAuthenticated]
@@ -159,3 +207,43 @@ class POSCheckoutView(APIView):
             }, status=status.HTTP_201_CREATED)
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class OrderViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        shop_id = ShopDetailView()._resolve_shop_id(self.request)
+        return Order.objects.filter(shop_id=shop_id).select_related('customer_profile').order_by('-created_at')
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return OrderListSerializer
+        return OrderDetailSerializer
+
+    @extend_schema(
+        tags=["dashboard", "orders"],
+        request=OrderStatusTransitionSerializer,
+        responses={200: OrderDetailSerializer},
+        summary="Transition an order to a new status",
+    )
+    @action(detail=True, methods=['post'])
+    def transition(self, request, pk=None):
+        order = self.get_object()
+        serializer = OrderStatusTransitionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        to_status = serializer.validated_data['to_status']
+        reason = serializer.validated_data.get('reason', '')
+        
+        try:
+            order_transition(
+                order=order,
+                to_status=to_status,
+                reason=reason,
+                user=request.user
+            )
+            return Response(OrderDetailSerializer(order).data)
+        except Exception as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+

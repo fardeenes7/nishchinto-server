@@ -16,7 +16,8 @@ if SENTRY_DSN:
     sentry_sdk.init(
         dsn=SENTRY_DSN,
         integrations=[DjangoIntegration()],
-        traces_sample_rate=1.0,
+        # Default 10% sampling — set SENTRY_TRACES_SAMPLE_RATE=1.0 for full tracing (expensive)
+        traces_sample_rate=float(env('SENTRY_TRACES_SAMPLE_RATE', default='0.1')),
         send_default_pii=True
     )
 
@@ -113,12 +114,24 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'nishchinto.wsgi.application'
 
-# Database Setup
-# Using django-pg-zero-downtime-migrations engine as requested
+import sys
+IS_TESTING = 'test' in sys.argv
+
 DATABASES = {
-    'default': env.db('DATABASE_URL', default='postgres://nishchinto:nishchinto_password@localhost:5432/nishchinto')
+    'default': {
+        **env.db('DATABASE_URL', default='postgres://nishchinto:nishchinto_password@localhost:5432/nishchinto'),
+        'CONN_MAX_AGE': env.int('CONN_MAX_AGE', default=60),
+    }
 }
-DATABASES['default']['ENGINE'] = 'django_zero_downtime_migrations.backends.postgres'
+
+if IS_TESTING:
+    DATABASES['default']['ENGINE'] = 'django.db.backends.postgresql'
+    # Bypass PgBouncer for tests to allow creating/connecting to test DBs
+    if 'pgbouncer' in DATABASES['default'].get('HOST', ''):
+        DATABASES['default']['HOST'] = 'db'
+        DATABASES['default']['PORT'] = '5432'
+else:
+    DATABASES['default']['ENGINE'] = 'django_zero_downtime_migrations.backends.postgres'
 
 # Auth Model
 AUTH_USER_MODEL = 'users.User'
@@ -257,6 +270,9 @@ CACHES = {
         },
     }
 }
+
+if IS_TESTING and 'redis' not in CACHES['default']['LOCATION'] and os.path.exists('/.dockerenv'):
+    CACHES['default']['LOCATION'] = 'redis://redis:6379/0'
 
 # Auth Configuration
 AUTHENTICATION_BACKENDS = [

@@ -33,7 +33,7 @@ services:
 
     pgbouncer:
         image: public.ecr.aws/bitnami/pgbouncer:1.25.1-debian-12-r8
-        platform: linux/amd64
+        # No platform lock — supports both amd64 and arm64 hosts
         restart: always
         environment:
             - PGBOUNCER_DATABASE=${PGBOUNCER_DB_NAME}
@@ -45,8 +45,12 @@ services:
             - PGBOUNCER_ADMIN_USER=${PGBOUNCER_DB_USER}
             - PGBOUNCER_ADMIN_PASSWORD=${PGBOUNCER_DB_PASSWORD}
             - PGBOUNCER_USERLIST="${PGBOUNCER_DB_USER}" "${PGBOUNCER_DB_PASSWORD}"
-            - PGBOUNCER_MAX_CLIENT_CONN=${PGBOUNCER_MAX_CLIENT_CONN}
-            - PGBOUNCER_POOL_MODE=${PGBOUNCER_POOL_MODE}
+            - PGBOUNCER_MAX_CLIENT_CONN=${PGBOUNCER_MAX_CLIENT_CONN:-500}
+            - PGBOUNCER_POOL_MODE=${PGBOUNCER_POOL_MODE:-transaction}
+            - PGBOUNCER_DEFAULT_POOL_SIZE=${PGBOUNCER_DEFAULT_POOL_SIZE:-20}
+            - PGBOUNCER_RESERVE_POOL_SIZE=${PGBOUNCER_RESERVE_POOL_SIZE:-5}
+            - PGBOUNCER_RESERVE_POOL_TIMEOUT=${PGBOUNCER_RESERVE_POOL_TIMEOUT:-5}
+            - PGBOUNCER_SERVER_IDLE_TIMEOUT=${PGBOUNCER_SERVER_IDLE_TIMEOUT:-300}
         depends_on:
             db:
                 condition: service_healthy
@@ -70,7 +74,8 @@ services:
             retries: 6
 
     rabbitmq:
-        image: rabbitmq:3-management
+        # Use non-management image in prod — smaller footprint, no admin UI attack surface
+        image: rabbitmq:3
         platform: linux/amd64
         restart: always
         environment:
@@ -115,6 +120,9 @@ services:
             ALLOWED_HOSTS: ${ALLOWED_HOSTS}
             CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS}
             CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+            # CONN_MAX_AGE MUST be 0 with PgBouncer transaction mode.
+            # Persistent connections cause pool exhaustion and FATAL errors.
+            CONN_MAX_AGE: "0"
             DATABASE_URL: ${DATABASE_URL}
             REDIS_URL: ${REDIS_URL}
             CELERY_BROKER_URL: ${CELERY_BROKER_URL}
@@ -131,11 +139,17 @@ services:
             EMAIL_USE_TLS: ${EMAIL_USE_TLS}
             EMAIL_HOST_USER: ${EMAIL_HOST_USER}
             EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD}
+            # WEB_URL: used in email links, OAuth redirects, storefront URLs
+            WEB_URL: ${WEB_URL}
             SENTRY_DSN: ${SENTRY_DSN:-}
             META_APP_ID: ${META_APP_ID:-}
             META_APP_SECRET: ${META_APP_SECRET:-}
             META_OAUTH_REDIRECT_URI: ${META_OAUTH_REDIRECT_URI:-}
+            # Secures Meta webhook endpoint — must NOT be the default public string
+            META_WEBHOOK_VERIFY_TOKEN: ${META_WEBHOOK_VERIFY_TOKEN}
             OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+            GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+            GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
         depends_on:
             pgbouncer:
                 condition: service_healthy
@@ -236,6 +250,9 @@ services:
             REDIS_URL: ${REDIS_URL}
             CELERY_BROKER_URL: ${CELERY_BROKER_URL}
             OPENAI_API_KEY: ${OPENAI_API_KEY}
+            # Required for embed_faq_entry and embed_product_specs tasks
+            MEILISEARCH_HOST: ${MEILISEARCH_HOST}
+            MEILISEARCH_API_KEY: ${MEILISEARCH_API_KEY}
             SENTRY_DSN: ${SENTRY_DSN:-}
         depends_on:
             pgbouncer:

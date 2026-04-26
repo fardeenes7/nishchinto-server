@@ -36,15 +36,19 @@ services:
         platform: linux/amd64
         restart: unless-stopped
         environment:
-            - PGBOUNCER_DATABASE=nishchinto
+            - PGBOUNCER_DATABASE=${PGBOUNCER_DB_NAME:-nishchinto}
             - PGBOUNCER_PORT=5432
-            - PGBOUNCER_AUTH_TYPE=md5
+            - PGBOUNCER_AUTH_TYPE=${PGBOUNCER_AUTH_TYPE:-scram-sha-256}
             - POSTGRESQL_HOST=db
             - POSTGRESQL_USER=${PGBOUNCER_DB_USER}
             - POSTGRESQL_PASSWORD=${PGBOUNCER_DB_PASSWORD}
             - PGBOUNCER_USERLIST="${PGBOUNCER_DB_USER}" "${PGBOUNCER_DB_PASSWORD}"
-            - PGBOUNCER_MAX_CLIENT_CONN=500
-            - PGBOUNCER_POOL_MODE=transaction
+            - PGBOUNCER_MAX_CLIENT_CONN=${PGBOUNCER_MAX_CLIENT_CONN:-500}
+            - PGBOUNCER_POOL_MODE=${PGBOUNCER_POOL_MODE:-transaction}
+            - PGBOUNCER_DEFAULT_POOL_SIZE=${PGBOUNCER_DEFAULT_POOL_SIZE:-20}
+            - PGBOUNCER_RESERVE_POOL_SIZE=${PGBOUNCER_RESERVE_POOL_SIZE:-5}
+            - PGBOUNCER_RESERVE_POOL_TIMEOUT=${PGBOUNCER_RESERVE_POOL_TIMEOUT:-5}
+            - PGBOUNCER_SERVER_IDLE_TIMEOUT=${PGBOUNCER_SERVER_IDLE_TIMEOUT:-300}
         depends_on:
             db:
                 condition: service_healthy
@@ -69,6 +73,7 @@ services:
 
     rabbitmq:
         image: rabbitmq:3-management
+        platform: linux/amd64
         restart: unless-stopped
         environment:
             RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
@@ -84,7 +89,9 @@ services:
             retries: 5
 
     meilisearch:
-        image: getmeili/meilisearch:latest
+        # Pinned to same version as prod (docker-compose.prod.yml) — never use latest
+        image: getmeili/meilisearch:v1.13
+        platform: linux/amd64
         restart: unless-stopped
         command:
             ["meilisearch", "--db-path", "/meili_data", "--env", "production"]
@@ -105,6 +112,7 @@ services:
         build:
             context: .
             dockerfile: Dockerfile
+        platform: linux/amd64
         command: python manage.py runserver 0.0.0.0:8000
         restart: unless-stopped
         volumes:
@@ -141,8 +149,10 @@ services:
         build:
             context: .
             dockerfile: Dockerfile
-        command: celery -A nishchinto worker -l info -Q high_priority
+        platform: linux/amd64
+        command: celery -A nishchinto worker -l info -Q high_priority --concurrency 1
         restart: unless-stopped
+        mem_limit: 512m
         volumes:
             - .:/app
         environment:
@@ -165,8 +175,10 @@ services:
         build:
             context: .
             dockerfile: Dockerfile
-        command: celery -A nishchinto worker -l info -Q default
+        platform: linux/amd64
+        command: celery -A nishchinto worker -l info -Q default --concurrency 1
         restart: unless-stopped
+        mem_limit: 512m
         volumes:
             - .:/app
         environment:
@@ -189,8 +201,10 @@ services:
         build:
             context: .
             dockerfile: Dockerfile
-        command: celery -A nishchinto worker -l info -Q media_processing
+        platform: linux/amd64
+        command: celery -A nishchinto worker -l info -Q media_processing --concurrency 1
         restart: unless-stopped
+        mem_limit: 512m
         volumes:
             - .:/app
         environment:
@@ -212,12 +226,18 @@ services:
             redis:
                 condition: service_healthy
 
-    celery_worker_ai_rag:
+    # ── AI Workers (consolidated for dev) ────────────────────────────────────────
+    # In production, split these back into separate services per queue.
+    # In dev, one worker handles all AI queues to save ~2 GiB RAM
+    # (3 × 1.2 GiB workers → 1 × 1.2 GiB worker).
+    celery_worker_ai:
         build:
             context: .
             dockerfile: Dockerfile
-        command: celery -A nishchinto worker -l info -Q ai_rag
+        platform: linux/amd64
+        command: celery -A nishchinto worker -l info -Q ai_rag,ai_copy,ai_image --concurrency 1
         restart: unless-stopped
+        mem_limit: 1g
         volumes:
             - .:/app
         environment:
@@ -227,52 +247,8 @@ services:
             CELERY_BROKER_URL: ${CELERY_BROKER_URL}
             REDIS_URL: ${REDIS_URL}
             OPENAI_API_KEY: ${OPENAI_API_KEY}
-        depends_on:
-            pgbouncer:
-                condition: service_healthy
-            rabbitmq:
-                condition: service_healthy
-            redis:
-                condition: service_healthy
-
-    celery_worker_ai_copy:
-        build:
-            context: .
-            dockerfile: Dockerfile
-        command: celery -A nishchinto worker -l info -Q ai_copy
-        restart: unless-stopped
-        volumes:
-            - .:/app
-        environment:
-            DEBUG: "True"
-            SECRET_KEY: ${SECRET_KEY:-django-insecure-dev-only-not-for-production}
-            DATABASE_URL: ${DATABASE_URL}
-            CELERY_BROKER_URL: ${CELERY_BROKER_URL}
-            REDIS_URL: ${REDIS_URL}
-            OPENAI_API_KEY: ${OPENAI_API_KEY}
-        depends_on:
-            pgbouncer:
-                condition: service_healthy
-            rabbitmq:
-                condition: service_healthy
-            redis:
-                condition: service_healthy
-
-    celery_worker_ai_image:
-        build:
-            context: .
-            dockerfile: Dockerfile
-        command: celery -A nishchinto worker -l info -Q ai_image
-        restart: unless-stopped
-        volumes:
-            - .:/app
-        environment:
-            DEBUG: "True"
-            SECRET_KEY: ${SECRET_KEY:-django-insecure-dev-only-not-for-production}
-            DATABASE_URL: ${DATABASE_URL}
-            CELERY_BROKER_URL: ${CELERY_BROKER_URL}
-            REDIS_URL: ${REDIS_URL}
-            OPENAI_API_KEY: ${OPENAI_API_KEY}
+            MEILISEARCH_HOST: ${MEILISEARCH_HOST}
+            MEILISEARCH_API_KEY: ${MEILISEARCH_API_KEY}
         depends_on:
             pgbouncer:
                 condition: service_healthy
@@ -285,8 +261,10 @@ services:
         build:
             context: .
             dockerfile: Dockerfile
+        platform: linux/amd64
         command: celery -A nishchinto beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
         restart: unless-stopped
+        mem_limit: 256m
         volumes:
             - .:/app
         environment:
