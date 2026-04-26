@@ -67,7 +67,7 @@ class SocialOAuthStartView(ShopScopedAPIView):
                 "client_id": app_id,
                 "redirect_uri": redirect_uri,
                 "state": state,
-                "scope": "pages_manage_posts,pages_read_engagement,pages_show_list",
+                "scope": "pages_manage_posts,pages_read_engagement,pages_show_list,ads_management,ads_read,business_management",
                 "response_type": "code",
             }
         )
@@ -141,6 +141,26 @@ class SocialOAuthCallbackView(ShopScopedAPIView):
             if not user_access_token:
                 return Response({"detail": "Meta OAuth token response missing access_token."}, status=status.HTTP_400_BAD_REQUEST)
 
+            # 1. Fetch User Info (to save user-level token for Marketing API)
+            user_info_resp = requests.get(
+                "https://graph.facebook.com/v19.0/me",
+                params={"access_token": user_access_token, "fields": "id,name"},
+                timeout=10
+            )
+            user_info = user_info_resp.json()
+
+            from marketing.models import MetaUserAccount
+            MetaUserAccount.objects.update_or_create(
+                shop_id=shop_id,
+                defaults={
+                    "tenant_id": shop_id,
+                    "meta_user_id": user_info.get("id"),
+                    "name": user_info.get("name"),
+                    "access_token": user_access_token,
+                }
+            )
+
+            # 2. Fetch Pages
             pages_response = requests.get(
                 "https://graph.facebook.com/v19.0/me/accounts",
                 params={

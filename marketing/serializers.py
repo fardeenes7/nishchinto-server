@@ -1,11 +1,17 @@
 from rest_framework import serializers
-from .models import WaitlistEntry, SocialConnection, ProductSocialPostLog
+from .models import WaitlistEntry, SocialConnection, ProductSocialPostLog, MetaAdAccount
 
 class WaitlistEntrySerializer(serializers.ModelSerializer):
     class Meta:
         model = WaitlistEntry
         fields = ('id', 'email', 'phone_number', 'survey_data', 'status', 'created_at')
         read_only_fields = ('id', 'status', 'created_at')
+
+
+class MetaAdAccountSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MetaAdAccount
+        fields = ["id", "account_id", "name", "currency", "is_active"]
 
 
 class SocialConnectionSerializer(serializers.ModelSerializer):

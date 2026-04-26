@@ -39,6 +39,22 @@ class SocialPostStatus(models.TextChoices):
     FAILED = "FAILED", "Failed"
 
 
+class MetaUserAccount(TenantModel):
+    """
+    Stores the user-level Meta connection (OAuth token).
+    Used to discover Pages and Ad Accounts.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    shop = models.OneToOneField("shops.Shop", on_delete=models.CASCADE, related_name="meta_user_account")
+    meta_user_id = models.CharField(max_length=100, unique=True)
+    name = models.CharField(max_length=255)
+    access_token = models.TextField() # Long-lived User Access Token
+    token_expires_at = models.DateTimeField(null=True, blank=True)
+    
+    def __str__(self):
+        return f"{self.name} ({self.meta_user_id})"
+
+
 class SocialConnection(TenantModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     shop = models.ForeignKey("shops.Shop", on_delete=models.CASCADE, related_name="social_connections")
@@ -94,3 +110,51 @@ class ProductSocialPostLog(TenantModel):
 
     def __str__(self):
         return f"{self.product_id}::{self.connection_id}::{self.status}"
+
+
+class MetaAdAccount(TenantModel):
+    """
+    Linked Meta Ad Account for a shop.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    shop = models.ForeignKey("shops.Shop", on_delete=models.CASCADE, related_name="ad_accounts")
+    account_id = models.CharField(max_length=100, unique=True) # act_XXXXXXXX
+    name = models.CharField(max_length=255)
+    currency = models.CharField(max_length=10, default="BDT")
+    is_active = models.BooleanField(default=True)
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=["shop", "is_active"]),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.account_id})"
+
+
+class MetaAdCampaign(TenantModel):
+    """
+    Tracks automated ad campaigns launched via Nishchinto.
+    """
+    STATUS_CHOICES = (
+        ('ACTIVE', 'Active'),
+        ('PAUSED', 'Paused'),
+        ('ARCHIVED', 'Archived'),
+    )
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    shop = models.ForeignKey("shops.Shop", on_delete=models.CASCADE, related_name="ad_campaigns")
+    ad_account = models.ForeignKey(MetaAdAccount, on_delete=models.CASCADE, related_name="campaigns")
+    external_campaign_id = models.CharField(max_length=100, unique=True)
+    name = models.CharField(max_length=255)
+    daily_budget_bdt = models.DecimalField(max_digits=12, decimal_places=2)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ACTIVE')
+    
+    # Store audience/targeting details as JSON
+    targeting_data = models.JSONField(default=dict, blank=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.external_campaign_id})"
