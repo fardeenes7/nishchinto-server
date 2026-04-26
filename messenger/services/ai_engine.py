@@ -23,6 +23,9 @@ from django.db import transaction
 from django.utils import timezone
 from openai import OpenAI, APIError, APIConnectionError, RateLimitError
 
+from core.models import AIModelUsage
+from core.services.ai_model_registry import resolve_ai_model
+from core.services.ai_credits import calculate_credits, deduct_ai_credits, has_sufficient_ai_credits
 from messenger.models import MessengerMessage, MessageDirection
 from messenger.selectors import message_list_for_psid
 from messenger.services.bot_state import ctx_cache_append, ctx_cache_get, ctx_cache_populate
@@ -30,49 +33,8 @@ from messenger.services.tools import TOOL_SCHEMAS, execute_tool
 
 logger = logging.getLogger(__name__)
 
+# Credits and Cost handled via core.services.ai_credits
 _MAX_TOOL_CALLS = 5          # global_business_rules_and_limits.md §5
-_MODEL = "gpt-4o-mini"       # configurable; cost-effective default
-# 1 credit = $0.01 USD actual API cost (global_business_rules_and_limits.md §3)
-_USD_PER_CREDIT = Decimal("0.01")
-
-# Pricing per 1M tokens — update when model rates change.
-_PRICING: dict[str, dict[str, Decimal]] = {
-    "gpt-4o-mini": {"input": Decimal("0.00015"), "output": Decimal("0.0006")},
-    "gpt-4o":       {"input": Decimal("0.0025"),  "output": Decimal("0.01")},
-}
-
-
-# ---------------------------------------------------------------------------
-# Credit management
-# ---------------------------------------------------------------------------
-
-def _calculate_credits(*, model: str, input_tokens: int, output_tokens: int) -> Decimal:
-    rates = _PRICING.get(model, _PRICING["gpt-4o-mini"])
-    usd_cost = (
-        rates["input"] * input_tokens / 1_000_000
-        + rates["output"] * output_tokens / 1_000_000
-    )
-    return (usd_cost / _USD_PER_CREDIT).quantize(Decimal("0.01"))
-
-
-def _deduct_credits(*, shop_id: str, credits: Decimal) -> None:
-    """Atomic credit deduction via SELECT FOR UPDATE on ShopSettings."""
-    from shops.models import ShopSettings
-    with transaction.atomic():
-        obj = ShopSettings.objects.select_for_update().get(
-            shop_id=shop_id, deleted_at__isnull=True
-        )
-        obj.ai_credit_balance = max(Decimal("0"), obj.ai_credit_balance - credits)
-        obj.save(update_fields=["ai_credit_balance", "updated_at"])
-
-
-def _has_sufficient_credits(*, shop_id: str, minimum: Decimal = Decimal("0.01")) -> bool:
-    from shops.models import ShopSettings
-    try:
-        obj = ShopSettings.objects.get(shop_id=shop_id, deleted_at__isnull=True)
-        return obj.ai_credit_balance >= minimum
-    except ShopSettings.DoesNotExist:
-        return False
 
 
 # ---------------------------------------------------------------------------
@@ -195,11 +157,12 @@ def run_ai_turn(
     openai_messages.append({"role": "user", "content": inbound_text})
 
     # 3. Credit check
-    if not _has_sufficient_credits(shop_id=shop_id):
+    if not has_sufficient_ai_credits(shop_id=shop_id):
         _handle_credit_exhaustion(shop_id=shop_id, page_id=page_id, psid=psid)
         return fallback_message or "I'm having a little trouble right now. Our team will reach out shortly! 🙏"
 
     # 4. OpenAI tool-call loop
+    chat_model = resolve_ai_model(usage=AIModelUsage.CHAT_COMPLETION)
     client = OpenAI(api_key=settings.OPENAI_API_KEY)
     total_input_tokens = 0
     total_output_tokens = 0
@@ -211,7 +174,7 @@ def run_ai_turn(
             response = _call_openai_with_retry(
                 client=client,
                 messages=openai_messages,
-                model=_MODEL,
+                model=chat_model.model_name,
             )
             usage = response.usage
             if usage:
@@ -258,12 +221,17 @@ def run_ai_turn(
         return fallback_message or "I'm having a little trouble right now. Our team will reach out shortly! 🙏"
 
     # 5. Deduct credits
-    credits = _calculate_credits(
-        model=_MODEL, input_tokens=total_input_tokens, output_tokens=total_output_tokens
+    input_rate = chat_model.input_price_per_1m_tokens or Decimal("0.15")
+    output_rate = chat_model.output_price_per_1m_tokens or Decimal("0.60")
+    credits = calculate_credits(
+        model_input_rate=input_rate,
+        model_output_rate=output_rate,
+        input_tokens=total_input_tokens,
+        output_tokens=total_output_tokens,
     )
     if credits > 0:
         try:
-            _deduct_credits(shop_id=shop_id, credits=credits)
+            deduct_ai_credits(shop_id=shop_id, credits=credits)
         except Exception as exc:
             logger.error("Credit deduction failed shop=%s: %s", shop_id, exc)
 

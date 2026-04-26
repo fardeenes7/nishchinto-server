@@ -1,14 +1,72 @@
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, generics
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
 from shops.api.views import ShopDetailView
-from billing.models import ShopSubscription, PaymentGatewayConfig, PaymentMethod, MerchantAPIToken, OutboundWebhook
+from billing.models import (
+    ShopSubscription, PaymentGatewayConfig, PaymentMethod, 
+    MerchantAPIToken, OutboundWebhook, AICreditPackage, AICreditTopUp
+)
 from billing.api.serializers import (
     ShopSubscriptionSerializer, PaymentGatewayConfigSerializer, PaymentMethodSerializer,
-    MerchantAPITokenSerializer, OutboundWebhookSerializer
+    MerchantAPITokenSerializer, OutboundWebhookSerializer, AICreditPackageSerializer,
+    AICreditTopUpSerializer
 )
+from billing.services.ai_credits import AICreditService
+# ... other imports ...
+
+class AICreditTopUpViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    serializer_class = AICreditTopUpSerializer
+
+    def get_queryset(self):
+        shop_id = ShopDetailView()._resolve_shop_id(self.request)
+        return AICreditTopUp.objects.filter(shop_id=shop_id, deleted_at__isnull=True)
+
+    @action(detail=False, methods=['post'], url_path='initiate')
+    def initiate(self, request):
+        shop_id = ShopDetailView()._resolve_shop_id(request)
+        from shops.models import Shop
+        shop = Shop.objects.get(id=shop_id)
+        
+        package_id = request.data.get('package_id')
+        callback_url = request.data.get('callback_url')
+        
+        if not package_id or not callback_url:
+            return Response({"error": "package_id and callback_url are required"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        service = AICreditService(shop)
+        try:
+            res = service.initiate_topup(package_id, callback_url)
+            return Response(res)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['post'], url_path='finalize')
+    def finalize(self, request):
+        shop_id = ShopDetailView()._resolve_shop_id(request)
+        from shops.models import Shop
+        shop = Shop.objects.get(id=shop_id)
+        
+        payment_id = request.data.get('payment_id')
+        if not payment_id:
+            return Response({"error": "payment_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        service = AICreditService(shop)
+        try:
+            res = service.finalize_topup(payment_id)
+            return Response(res)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+class AICreditPackageViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Publicly list available AI credit packages.
+    """
+    permission_classes = [IsAuthenticated]
+    serializer_class = AICreditPackageSerializer
+    queryset = AICreditPackage.objects.filter(is_active=True).order_by("sort_order")
 from billing.services.subscription import get_subscription_context
 from billing.services.gateway import set_gateway_credentials
 from billing.services.developer import create_api_token

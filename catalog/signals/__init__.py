@@ -60,3 +60,18 @@ def meilisearch_index_product(sender, instance, **kwargs):
         catalog_index_product.delay(product_id)
 
     transaction.on_commit(_enqueue)
+
+
+@receiver(post_save, sender="catalog.Product")
+def trigger_product_rag_indexing(sender, instance, **kwargs):
+    """
+    EPIC A-03: Enqueue an async task to generate semantic embeddings for RAG.
+    """
+    from messenger.tasks.rag import embed_product_specs
+
+    product_id = str(instance.pk)
+
+    def _enqueue():
+        embed_product_specs.delay(product_id=product_id)
+
+    transaction.on_commit(_enqueue)

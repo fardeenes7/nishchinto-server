@@ -166,44 +166,9 @@ def _handle_postback(
 
 
 # ---------------------------------------------------------------------------
-# EPIC G-02 — FAQ embedding generation
+# EPIC G-02 — RAG indexing (Imported from messenger.tasks.rag)
 # ---------------------------------------------------------------------------
-
-@shared_task(
-    bind=True,
-    max_retries=3,
-    default_retry_delay=10,
-    queue="ai",
-    name="messenger.tasks.embed_faq_entry",
-)
-def embed_faq_entry(self, *, faq_entry_id: str) -> None:
-    """
-    Generate the pgvector embedding for a FAQEntry using
-    text-embedding-3-small and persist it to the DB.
-    """
-    from openai import OpenAI
-    from django.conf import settings as django_settings
-    from messenger.models import FAQEntry
-
-    try:
-        entry = FAQEntry.objects.get(id=faq_entry_id, deleted_at__isnull=True)
-    except FAQEntry.DoesNotExist:
-        logger.warning("embed_faq_entry: FAQEntry %s not found", faq_entry_id)
-        return
-
-    text = f"Q: {entry.question}\nA: {entry.answer}"
-
-    try:
-        client = OpenAI(api_key=django_settings.OPENAI_API_KEY)
-        resp = client.embeddings.create(model="text-embedding-3-small", input=text)
-        vector = resp.data[0].embedding
-    except Exception as exc:
-        logger.error("Embedding generation failed for FAQEntry %s: %s", faq_entry_id, exc)
-        raise self.retry(exc=exc)
-
-    entry.embedding = vector
-    entry.save(update_fields=["embedding", "updated_at"])
-    logger.info("Embedded FAQEntry %s successfully.", faq_entry_id)
+from messenger.tasks.rag import embed_faq_entry, embed_product_specs
 
 
 # ---------------------------------------------------------------------------

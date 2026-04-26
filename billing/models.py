@@ -386,6 +386,68 @@ class RefundRecord(TenantModel):
         super().save(*args, **kwargs)
 
 
+# ─── EPIC B: AI Credits (v0.9) ────────────────────────────────────────────────
+
+class AICreditPackage(models.Model):
+    """
+    Fixed-price credit bundles available for purchase.
+    Profit margin is built into the retail_price_bdt.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=100)  # e.g. "Starter Pack (100 Credits)"
+    credits = models.PositiveIntegerField()
+    retail_price_bdt = models.DecimalField(max_digits=10, decimal_places=2)
+    is_active = models.BooleanField(default=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["sort_order", "credits"]
+
+    def __str__(self) -> str:
+        return f"{self.name} | {self.retail_price_bdt} ৳"
+
+
+class AICreditTopUp(TenantModel):
+    """
+    Tracks a specific purchase of AI credits by a shop.
+    Linked to a PaymentTransaction once completed.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    shop = models.ForeignKey(
+        "shops.Shop",
+        on_delete=models.CASCADE,
+        related_name="ai_topups",
+    )
+    package = models.ForeignKey(AICreditPackage, on_delete=models.SET_NULL, null=True)
+
+    credits_purchased = models.PositiveIntegerField()
+    amount_paid_bdt = models.DecimalField(max_digits=10, decimal_places=2)
+
+    # Link to the transaction that funded this top-up
+    transaction = models.OneToOneField(
+        "billing.PaymentTransaction",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="ai_topup_record",
+    )
+
+    status = models.CharField(max_length=20, default="PENDING")  # PENDING, COMPLETED, FAILED
+
+    # Credits expire in 60 days per business rules §3
+    expires_at = models.DateTimeField(null=True, blank=True)
+    is_expired = models.BooleanField(default=False)
+
+    def save(self, *args, **kwargs):
+        if not self.tenant_id:
+            self.tenant_id = self.shop_id
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return f"{self.shop_id} | {self.credits_purchased} credits | {self.status}"
+
+
 
 # ─── EPIC G: Developer API Tokens ─────────────────────────────────────────────
 

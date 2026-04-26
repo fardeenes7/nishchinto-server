@@ -5,242 +5,312 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 services:
+    # ── Infrastructure ───────────────────────────────────────────────────────────
+    db:
+        image: pgvector/pgvector:pg16-alpine
+        restart: always
+        environment:
+            POSTGRES_USER: ${POSTGRES_USER}
+            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+            POSTGRES_DB: ${POSTGRES_DB}
+            APP_DB_USER: ${APP_DB_USER}
+            APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+            PGBOUNCER_DB_USER: ${PGBOUNCER_DB_USER}
+            PGBOUNCER_DB_PASSWORD: ${PGBOUNCER_DB_PASSWORD}
+        volumes:
+            - postgres_data:/var/lib/postgresql/data
+            - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+        healthcheck:
+            test:
+                [
+                    "CMD-SHELL",
+                    "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}",
+                ]
+            interval: 10s
+            timeout: 5s
+            retries: 6
+            start_period: 30s
 
-  # ── Infrastructure ───────────────────────────────────────────────────────────
-  db:
-    image: pgvector/pgvector:pg16-alpine
-    restart: always
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-      APP_DB_USER: ${APP_DB_USER}
-      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
-      PGBOUNCER_DB_USER: ${PGBOUNCER_DB_USER}
-      PGBOUNCER_DB_PASSWORD: ${PGBOUNCER_DB_PASSWORD}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 10s
-      timeout: 5s
-      retries: 6
-      start_period: 30s
+    pgbouncer:
+        image: public.ecr.aws/bitnami/pgbouncer:1.25.1-debian-12-r8
+        platform: linux/amd64
+        restart: always
+        environment:
+            - PGBOUNCER_DATABASE=${PGBOUNCER_DB_NAME}
+            - PGBOUNCER_PORT=5432
+            - PGBOUNCER_AUTH_TYPE=scram-sha-256
+            - POSTGRESQL_HOST=db
+            - POSTGRESQL_USER=${PGBOUNCER_DB_USER}
+            - POSTGRESQL_PASSWORD=${PGBOUNCER_DB_PASSWORD}
+            - PGBOUNCER_ADMIN_USER=${PGBOUNCER_DB_USER}
+            - PGBOUNCER_ADMIN_PASSWORD=${PGBOUNCER_DB_PASSWORD}
+            - PGBOUNCER_USERLIST="${PGBOUNCER_DB_USER}" "${PGBOUNCER_DB_PASSWORD}"
+            - PGBOUNCER_MAX_CLIENT_CONN=${PGBOUNCER_MAX_CLIENT_CONN}
+            - PGBOUNCER_POOL_MODE=${PGBOUNCER_POOL_MODE}
+        depends_on:
+            db:
+                condition: service_healthy
+        healthcheck:
+            test: ["CMD-SHELL", "pgbouncer --version"]
+            interval: 10s
+            timeout: 5s
+            retries: 6
+            start_period: 20s
 
-  pgbouncer:
-    image: public.ecr.aws/bitnami/pgbouncer:1.25.1-debian-12-r8
-    platform: linux/amd64
-    restart: always
-    environment:
-      - PGBOUNCER_DATABASE=${PGBOUNCER_DB_NAME}
-      - PGBOUNCER_PORT=5432
-      - PGBOUNCER_AUTH_TYPE=scram-sha-256
-      - POSTGRESQL_HOST=db
-      - POSTGRESQL_USER=${PGBOUNCER_DB_USER}
-      - POSTGRESQL_PASSWORD=${PGBOUNCER_DB_PASSWORD}
-      - PGBOUNCER_ADMIN_USER=${PGBOUNCER_DB_USER}
-      - PGBOUNCER_ADMIN_PASSWORD=${PGBOUNCER_DB_PASSWORD}
-      - PGBOUNCER_USERLIST="${PGBOUNCER_DB_USER}" "${PGBOUNCER_DB_PASSWORD}"
-      - PGBOUNCER_MAX_CLIENT_CONN=${PGBOUNCER_MAX_CLIENT_CONN}
-      - PGBOUNCER_POOL_MODE=${PGBOUNCER_POOL_MODE}
-    depends_on:
-      db:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "pgbouncer --version"]
-      interval: 10s
-      timeout: 5s
-      retries: 6
-      start_period: 20s
+    redis:
+        image: redis:7
+        platform: linux/amd64
+        restart: always
+        volumes:
+            - redis_data:/data
+        healthcheck:
+            test: ["CMD", "redis-cli", "ping"]
+            interval: 10s
+            timeout: 5s
+            retries: 6
 
-  redis:
-    image: redis:7
-    platform: linux/amd64
-    restart: always
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 6
+    rabbitmq:
+        image: rabbitmq:3-management
+        platform: linux/amd64
+        restart: always
+        environment:
+            RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+            RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+        volumes:
+            - rabbitmq_data:/var/lib/rabbitmq
+        healthcheck:
+            test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+            interval: 10s
+            timeout: 5s
+            retries: 6
+            start_period: 30s
 
-  rabbitmq:
-    image: rabbitmq:3-management
-    platform: linux/amd64
-    restart: always
-    environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 6
-      start_period: 30s
+    meilisearch:
+        image: getmeili/meilisearch:v1.13
+        restart: always
+        command: ["--db-path", "/meili_data/data.ms", "--env", "production"]
+        environment:
+            MEILI_MASTER_KEY: ${MEILISEARCH_API_KEY}
+        volumes:
+            - meilisearch_data:/meili_data
+        healthcheck:
+            test:
+                ["CMD", "wget", "-q", "-O", "-", "http://localhost:7700/health"]
+            interval: 15s
+            timeout: 5s
+            retries: 6
+            start_period: 30s
 
-  meilisearch:
-    image: getmeili/meilisearch:v1.13
-    restart: always
-    command: ["--db-path", "/meili_data/data.ms", "--env", "production"]
-    environment:
-      MEILI_MASTER_KEY: ${MEILISEARCH_API_KEY}
-    volumes:
-      - meilisearch_data:/meili_data
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:7700/health"]
-      interval: 15s
-      timeout: 5s
-      retries: 6
-      start_period: 30s
+    # ── Django API (gunicorn) ────────────────────────────────────────────────────
+    api:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        restart: always
+        ports:
+            - "8000:8000"
+        environment:
+            DEBUG: "False"
+            SECRET_KEY: ${SECRET_KEY}
+            ALLOWED_HOSTS: ${ALLOWED_HOSTS}
+            CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS}
+            CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+            DATABASE_URL: ${DATABASE_URL}
+            REDIS_URL: ${REDIS_URL}
+            CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+            MEILISEARCH_HOST: ${MEILISEARCH_HOST}
+            MEILISEARCH_API_KEY: ${MEILISEARCH_API_KEY}
+            AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+            AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+            AWS_S3_ENDPOINT_URL: ${AWS_S3_ENDPOINT_URL}
+            AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME}
+            AWS_S3_REGION_NAME: ${AWS_S3_REGION_NAME}
+            CDN_BASE_URL: ${CDN_BASE_URL}
+            EMAIL_HOST: ${EMAIL_HOST}
+            EMAIL_PORT: ${EMAIL_PORT}
+            EMAIL_USE_TLS: ${EMAIL_USE_TLS}
+            EMAIL_HOST_USER: ${EMAIL_HOST_USER}
+            EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD}
+            SENTRY_DSN: ${SENTRY_DSN:-}
+            META_APP_ID: ${META_APP_ID:-}
+            META_APP_SECRET: ${META_APP_SECRET:-}
+            META_OAUTH_REDIRECT_URI: ${META_OAUTH_REDIRECT_URI:-}
+        depends_on:
+            pgbouncer:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+            rabbitmq:
+                condition: service_healthy
+            meilisearch:
+                condition: service_healthy
 
-  # ── Django API (gunicorn) ────────────────────────────────────────────────────
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    restart: always
-    ports:
-      - "8000:8000"
-    environment:
-      DEBUG: "False"
-      SECRET_KEY: ${SECRET_KEY}
-      ALLOWED_HOSTS: ${ALLOWED_HOSTS}
-      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
-      DATABASE_URL: ${DATABASE_URL}
-      REDIS_URL: ${REDIS_URL}
-      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
-      MEILISEARCH_HOST: ${MEILISEARCH_HOST}
-      MEILISEARCH_API_KEY: ${MEILISEARCH_API_KEY}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-      AWS_S3_ENDPOINT_URL: ${AWS_S3_ENDPOINT_URL}
-      AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME}
-      AWS_S3_REGION_NAME: ${AWS_S3_REGION_NAME}
-      CDN_BASE_URL: ${CDN_BASE_URL}
-      EMAIL_HOST: ${EMAIL_HOST}
-      EMAIL_PORT: ${EMAIL_PORT}
-      EMAIL_USE_TLS: ${EMAIL_USE_TLS}
-      EMAIL_HOST_USER: ${EMAIL_HOST_USER}
-      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD}
-      SENTRY_DSN: ${SENTRY_DSN:-}
-      META_APP_ID: ${META_APP_ID:-}
-      META_APP_SECRET: ${META_APP_SECRET:-}
-      META_OAUTH_REDIRECT_URI: ${META_OAUTH_REDIRECT_URI:-}
-    depends_on:
-      pgbouncer:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-      meilisearch:
-        condition: service_healthy
+    # ── Celery Workers ───────────────────────────────────────────────────────────
+    celery_worker_default:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        command: celery -A nishchinto worker -l info -Q default --concurrency 4
+        restart: always
+        environment:
+            DEBUG: "False"
+            SECRET_KEY: ${SECRET_KEY}
+            DATABASE_URL: ${DATABASE_URL}
+            REDIS_URL: ${REDIS_URL}
+            CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+            MEILISEARCH_HOST: ${MEILISEARCH_HOST}
+            MEILISEARCH_API_KEY: ${MEILISEARCH_API_KEY}
+            SENTRY_DSN: ${SENTRY_DSN:-}
+        depends_on:
+            pgbouncer:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+            rabbitmq:
+                condition: service_healthy
+            meilisearch:
+                condition: service_healthy
 
-  # ── Celery Workers ───────────────────────────────────────────────────────────
-  celery_worker_default:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: celery -A nishchinto worker -l info -Q default --concurrency 4
-    restart: always
-    environment:
-      DEBUG: "False"
-      SECRET_KEY: ${SECRET_KEY}
-      DATABASE_URL: ${DATABASE_URL}
-      REDIS_URL: ${REDIS_URL}
-      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
-      MEILISEARCH_HOST: ${MEILISEARCH_HOST}
-      MEILISEARCH_API_KEY: ${MEILISEARCH_API_KEY}
-      SENTRY_DSN: ${SENTRY_DSN:-}
-    depends_on:
-      pgbouncer:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-      meilisearch:
-        condition: service_healthy
+    celery_worker_high:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        command: celery -A nishchinto worker -l info -Q high_priority --concurrency 2
+        restart: always
+        environment:
+            DEBUG: "False"
+            SECRET_KEY: ${SECRET_KEY}
+            DATABASE_URL: ${DATABASE_URL}
+            REDIS_URL: ${REDIS_URL}
+            CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+            MEILISEARCH_HOST: ${MEILISEARCH_HOST}
+            MEILISEARCH_API_KEY: ${MEILISEARCH_API_KEY}
+            SENTRY_DSN: ${SENTRY_DSN:-}
+        depends_on:
+            pgbouncer:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+            rabbitmq:
+                condition: service_healthy
+            meilisearch:
+                condition: service_healthy
 
-  celery_worker_high:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: celery -A nishchinto worker -l info -Q high_priority --concurrency 2
-    restart: always
-    environment:
-      DEBUG: "False"
-      SECRET_KEY: ${SECRET_KEY}
-      DATABASE_URL: ${DATABASE_URL}
-      REDIS_URL: ${REDIS_URL}
-      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
-      MEILISEARCH_HOST: ${MEILISEARCH_HOST}
-      MEILISEARCH_API_KEY: ${MEILISEARCH_API_KEY}
-      SENTRY_DSN: ${SENTRY_DSN:-}
-    depends_on:
-      pgbouncer:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-      meilisearch:
-        condition: service_healthy
+    celery_worker_media:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        command: celery -A nishchinto worker -l info -Q media_processing --concurrency 2
+        restart: always
+        environment:
+            DEBUG: "False"
+            SECRET_KEY: ${SECRET_KEY}
+            DATABASE_URL: ${DATABASE_URL}
+            REDIS_URL: ${REDIS_URL}
+            CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+            AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+            AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+            AWS_S3_ENDPOINT_URL: ${AWS_S3_ENDPOINT_URL}
+            AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME}
+            AWS_S3_REGION_NAME: ${AWS_S3_REGION_NAME}
+            SENTRY_DSN: ${SENTRY_DSN:-}
+        depends_on:
+            pgbouncer:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+            rabbitmq:
+                condition: service_healthy
 
-  celery_worker_media:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: celery -A nishchinto worker -l info -Q media_processing --concurrency 2
-    restart: always
-    environment:
-      DEBUG: "False"
-      SECRET_KEY: ${SECRET_KEY}
-      DATABASE_URL: ${DATABASE_URL}
-      REDIS_URL: ${REDIS_URL}
-      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-      AWS_S3_ENDPOINT_URL: ${AWS_S3_ENDPOINT_URL}
-      AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME}
-      AWS_S3_REGION_NAME: ${AWS_S3_REGION_NAME}
-      SENTRY_DSN: ${SENTRY_DSN:-}
-    depends_on:
-      pgbouncer:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
+    celery_worker_ai_rag:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        command: celery -A nishchinto worker -l info -Q ai_rag --concurrency 2
+        restart: always
+        environment:
+            DEBUG: "False"
+            SECRET_KEY: ${SECRET_KEY}
+            DATABASE_URL: ${DATABASE_URL}
+            REDIS_URL: ${REDIS_URL}
+            CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+            OPENAI_API_KEY: ${OPENAI_API_KEY}
+            SENTRY_DSN: ${SENTRY_DSN:-}
+        depends_on:
+            pgbouncer:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+            rabbitmq:
+                condition: service_healthy
 
-  celery_beat:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: celery -A nishchinto beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
-    restart: always
-    environment:
-      DEBUG: "False"
-      SECRET_KEY: ${SECRET_KEY}
-      DATABASE_URL: ${DATABASE_URL}
-      REDIS_URL: ${REDIS_URL}
-      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
-      SENTRY_DSN: ${SENTRY_DSN:-}
-    depends_on:
-      pgbouncer:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
+    celery_worker_ai_copy:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        command: celery -A nishchinto worker -l info -Q ai_copy --concurrency 2
+        restart: always
+        environment:
+            DEBUG: "False"
+            SECRET_KEY: ${SECRET_KEY}
+            DATABASE_URL: ${DATABASE_URL}
+            REDIS_URL: ${REDIS_URL}
+            CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+            OPENAI_API_KEY: ${OPENAI_API_KEY}
+            SENTRY_DSN: ${SENTRY_DSN:-}
+        depends_on:
+            pgbouncer:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+            rabbitmq:
+                condition: service_healthy
+
+    celery_worker_ai_image:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        command: celery -A nishchinto worker -l info -Q ai_image --concurrency 2
+        restart: always
+        environment:
+            DEBUG: "False"
+            SECRET_KEY: ${SECRET_KEY}
+            DATABASE_URL: ${DATABASE_URL}
+            REDIS_URL: ${REDIS_URL}
+            CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+            OPENAI_API_KEY: ${OPENAI_API_KEY}
+            SENTRY_DSN: ${SENTRY_DSN:-}
+        depends_on:
+            pgbouncer:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+            rabbitmq:
+                condition: service_healthy
+
+    celery_beat:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        command: celery -A nishchinto beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+        restart: always
+        environment:
+            DEBUG: "False"
+            SECRET_KEY: ${SECRET_KEY}
+            DATABASE_URL: ${DATABASE_URL}
+            REDIS_URL: ${REDIS_URL}
+            CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+            SENTRY_DSN: ${SENTRY_DSN:-}
+        depends_on:
+            pgbouncer:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+            rabbitmq:
+                condition: service_healthy
 
 volumes:
-  postgres_data:
-  redis_data:
-  rabbitmq_data:
-  meilisearch_data:
+    postgres_data:
+    redis_data:
+    rabbitmq_data:
+    meilisearch_data:

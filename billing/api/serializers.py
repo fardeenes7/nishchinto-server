@@ -1,5 +1,22 @@
 from rest_framework import serializers
-from billing.models import ShopSubscription, PaymentGatewayConfig, PaymentMethod, MerchantAPIToken, OutboundWebhook
+from billing.models import (
+    ShopSubscription, PaymentGatewayConfig, PaymentMethod, 
+    MerchantAPIToken, OutboundWebhook, AICreditPackage, AICreditTopUp
+)
+
+class AICreditPackageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AICreditPackage
+        fields = ["id", "name", "credits", "retail_price_bdt"]
+
+class AICreditTopUpSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AICreditTopUp
+        fields = [
+            "id", "credits_purchased", "amount_paid_bdt", "status", 
+            "expires_at", "is_expired", "created_at"
+        ]
+        read_only_fields = fields
 
 class ShopSubscriptionSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)

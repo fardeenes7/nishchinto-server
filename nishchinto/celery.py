@@ -17,11 +17,23 @@ app.config_from_object('django.conf:settings', namespace='CELERY')
 app.conf.task_queues = (
     Queue('default', Exchange('default'), routing_key='default'),
     Queue('high_priority', Exchange('high_priority'), routing_key='high_priority'),
+    Queue('media_processing', Exchange('media_processing'), routing_key='media_processing'),
+    Queue('messenger', Exchange('messenger'), routing_key='messenger'),
+    Queue('ai_rag', Exchange('ai_rag'), routing_key='ai_rag'),
+    Queue('ai_copy', Exchange('ai_copy'), routing_key='ai_copy'),
+    Queue('ai_image', Exchange('ai_image'), routing_key='ai_image'),
 )
 
 app.conf.task_default_queue = 'default'
 app.conf.task_default_exchange = 'default'
 app.conf.task_default_routing_key = 'default'
+
+app.conf.task_routes = {
+    'messenger.tasks.embed_faq_entry': {'queue': 'ai_rag', 'routing_key': 'ai_rag'},
+    'core.tasks.generate_product_copy': {'queue': 'ai_copy', 'routing_key': 'ai_copy'},
+    'core.tasks.generate_ad_copy': {'queue': 'ai_copy', 'routing_key': 'ai_copy'},
+    'core.tasks.generate_ad_image': {'queue': 'ai_image', 'routing_key': 'ai_image'},
+}
 
 # Load task modules from all registered Django apps.
 app.autodiscover_tasks()

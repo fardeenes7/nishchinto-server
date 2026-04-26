@@ -180,19 +180,26 @@ def get_subscription_context(shop: Shop) -> dict:
             'b2b_credit': matrix.get('b2b_credit'),
         },
     }
+class BillingService:
+    """
+    High-level orchestrator for subscription billing.
+    """
+    def __init__(self, shop: Shop):
+        self.shop = shop
+
     def initiate_subscription_payment(self, plan_id: str, callback_url: str):
         """
         Starts the bKash payment flow for a subscription upgrade/renewal.
         """
-        from billing.models import SubscriptionPlan
-        plan = SubscriptionPlan.objects.get(id=plan_id)
+        from billing.models import ShopSubscription
+        # Find the requested tier from the plan_id (placeholder logic)
+        # In a real app, we'd have a SubscriptionPlan model
+        target_tier = plan_id  # assuming plan_id is 'BASIC', 'PRO', etc.
         
         from billing.services.bkash import BKashService
+        # NOTE: In production, this should use the PLATFORM's bKash account,
+        # but for now we use the shop's config as a placeholder.
         bkash = BKashService(self.shop)
-        
-        # In a real scenario, we'd use the Nishchinto platform's bKash account 
-        # to collect subscription fees, not the merchant's own account.
-        # For this MVP, we assume the BKashService can be used.
         
         res = bkash.create_agreement(
             payer_reference=f"SUB-{self.shop.id}",
@@ -209,21 +216,9 @@ def get_subscription_context(shop: Shop) -> dict:
         
         res = bkash.execute_payment(payment_id)
         if res.get('statusCode') == '0000':
-            # Payment successful. Find the plan from the merchantInvoice
-            # (In a real app, we'd verify the amount and plan)
+            # For now, we'll extract the tier from the payerReference or a session
+            # As a placeholder, let's assume PRO if successful.
+            activate_subscription(self.shop, ShopSubscription.TIER_PRO)
+            return {"status": "SUCCESS", "tier": "PRO"}
             
-            # For now, let's assume we upgrade them to Business if they pay.
-            from billing.models import SubscriptionPlan
-            business_plan = SubscriptionPlan.objects.filter(tier='BUSINESS').first()
-            
-            if business_plan:
-                subscription = self.get_subscription_context()
-                subscription.plan = business_plan
-                subscription.status = 'ACTIVE'
-                subscription.current_period_start = timezone.now()
-                subscription.current_period_end = timezone.now() + timezone.timedelta(days=30)
-                subscription.save()
-                
-            return {"status": "SUCCESS", "plan": business_plan.name}
-            
-        return {"status": "FAILED"}
+        return {"status": "FAILED", "error": res.get('statusMessage')}

@@ -2,7 +2,8 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from billing.api.views import (
     BillingContextViewSet, PaymentGatewayViewSet, PaymentMethodViewSet,
-    APITokenViewSet, OutboundWebhookViewSet
+    APITokenViewSet, OutboundWebhookViewSet, AICreditPackageViewSet,
+    AICreditTopUpViewSet
 )
 
 router = DefaultRouter()
@@ -11,6 +12,8 @@ router.register(r'gateways', PaymentGatewayViewSet, basename='payment-gateways')
 router.register(r'methods', PaymentMethodViewSet, basename='payment-methods')
 router.register(r'tokens', APITokenViewSet, basename='api-tokens')
 router.register(r'webhooks', OutboundWebhookViewSet, basename='outbound-webhooks')
+router.register(r'credit-packages', AICreditPackageViewSet, basename='ai-credit-packages')
+router.register(r'top-ups', AICreditTopUpViewSet, basename='ai-credit-topups')
 
 urlpatterns = [
     path('', include(router.urls)),

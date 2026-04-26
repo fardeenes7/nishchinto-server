@@ -241,6 +241,79 @@ class ProductViewSet(ViewSet):
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response({"updated_count": updated_count}, status=status.HTTP_200_OK)
 
+    @action(detail=False, methods=["post"], url_path="ai-generate-description")
+    def ai_generate_description(self, request):
+        """
+        EPIC C-01: Generate an SEO-optimised product description using AI.
+        Requires: name, specifications (dict), tone (string).
+        """
+        shop_id = _require_tenant(request)
+
+        name = request.data.get("name")
+        specs = request.data.get("specifications", {})
+        tone = request.data.get("tone", "Professional")
+
+        if not name:
+            return Response({"detail": "Product name is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        from core.services.ai_gateway import AIGateway
+        gateway = AIGateway(shop_id)
+
+        specs_str = "\n".join([f"{k}: {v}" for k, v in specs.items()])
+        prompt = (
+            f"Write a compelling, SEO-optimized product description for a product named '{name}'.\n"
+            f"Tone: {tone}\n"
+            f"Key Specifications:\n{specs_str}\n\n"
+            "The description should be professional, highlighting benefits, and formatted with semantic HTML (p, ul, li) for a clean web storefront."
+        )
+
+        try:
+            description = gateway.call_chat_completion(
+                messages=[
+                    {"role": "system", "content": "You are a world-class e-commerce copywriter. Always return content formatted in clean, minimal HTML."},
+                    {"role": "user", "content": prompt}
+                ]
+            )
+            return Response({"description": description})
+        except Exception as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=["post"], url_path="ai-generate-image")
+    def ai_generate_image(self, request):
+        """
+        EPIC C-02: Generate a product image using AI (DALL-E 3) and save it.
+        Requires: prompt (string).
+        """
+        shop_id = _require_tenant(request)
+        prompt = request.data.get("prompt")
+
+        if not prompt:
+            return Response({"detail": "Prompt is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        from core.services.ai_gateway import AIGateway
+        from media.services.ai_generate import save_ai_generated_image
+        
+        gateway = AIGateway(shop_id)
+
+        try:
+            # 1. Generate via AI
+            image_url = gateway.call_image_generation(prompt=prompt)
+            
+            # 2. Persist to our storage
+            media = save_ai_generated_image(
+                shop_id=shop_id,
+                user_id=request.user.id,
+                image_url=image_url
+            )
+            
+            from media.api.serializers import MediaSerializer
+            return Response({
+                "media": MediaSerializer(media).data,
+                "cdn_url": media.cdn_url
+            })
+        except Exception as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
 
 # ─── Variants ────────────────────────────────────────────────────────────────
 

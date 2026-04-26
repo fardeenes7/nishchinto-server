@@ -400,16 +400,16 @@ def _confirm_order(
 
 
 def _search_faq(*, shop_id: str, query: str) -> dict:
-    from openai import OpenAI
-    from django.conf import settings
+    from core.services.ai_gateway import AIGateway
     from messenger.models import FAQEntry
+    from catalog.models import Product
     from pgvector.django import CosineDistance
 
-    client = OpenAI(api_key=settings.OPENAI_API_KEY)
-    embedding_resp = client.embeddings.create(model="text-embedding-3-small", input=query)
-    query_vector = embedding_resp.data[0].embedding
+    gateway = AIGateway(shop_id)
+    query_vector = gateway.call_embedding(text=query)
 
-    results = (
+    # 1. Search Policies & FAQ
+    faq_results = (
         FAQEntry.objects
         .filter(shop_id=shop_id, is_active=True, deleted_at__isnull=True, embedding__isnull=False)
         .annotate(distance=CosineDistance("embedding", query_vector))
@@ -417,15 +417,45 @@ def _search_faq(*, shop_id: str, query: str) -> dict:
         .order_by("distance")[:3]
     )
 
-    if not results:
-        return {"results": [], "message": "No matching FAQ entries found."}
+    # 2. Search Product Specs (RAG)
+    product_results = (
+        Product.objects
+        .filter(shop_id=shop_id, status="PUBLISHED", deleted_at__isnull=True, embedding__isnull=False)
+        .annotate(distance=CosineDistance("embedding", query_vector))
+        .filter(distance__lte=0.25)
+        .order_by("distance")[:3]
+    )
 
-    return {
-        "results": [
-            {"question": r.question, "answer": r.answer, "category": r.category}
-            for r in results
-        ]
-    }
+    combined_results = []
+    
+    for r in faq_results:
+        combined_results.append({
+            "type": "policy_faq",
+            "category": r.category,
+            "question": r.question,
+            "answer": r.answer,
+            "distance": float(r.distance),
+        })
+        
+    for r in product_results:
+        # Build a concise summary of the specs
+        specs_summary = ", ".join([f"{k}: {v}" for k, v in r.specifications.items()])
+        combined_results.append({
+            "type": "product_specs",
+            "product_name": r.name,
+            "description": r.description[:200] + "...",
+            "specifications": specs_summary,
+            "distance": float(r.distance),
+        })
+
+    # Sort by distance and take top 3
+    combined_results.sort(key=lambda x: x["distance"])
+    final_results = combined_results[:3]
+
+    if not final_results:
+        return {"results": [], "message": "No matching knowledge found."}
+
+    return {"results": final_results}
 
 
 def _get_older_messages(*, shop_id: str, psid: str, before_timestamp: int, limit: int = 20) -> dict:

@@ -16,6 +16,7 @@ import uuid
 from django.contrib.postgres.search import SearchVectorField
 from django.db import models
 from django.utils.text import slugify
+from pgvector.django import VectorField
 
 from core.models import TenantModel
 
@@ -92,6 +93,10 @@ class Product(TenantModel):
 
     # ── Full-text search vector (updated via signal) ───────────────────────
     search_vector = SearchVectorField(null=True, blank=True)
+    
+    # ── Semantic embedding for RAG (populated by Celery) ───────────────────
+    # 1536-dim vector from text-embedding-3-small
+    embedding = VectorField(dimensions=1536, null=True, blank=True)
 
     class Meta:
         verbose_name = "Product"
