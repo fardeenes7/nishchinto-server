@@ -23,12 +23,59 @@ def _resolve_available_stock(*, product: Product, variant: ProductVariant | None
     return int(product.total_stock)
 
 
-def checkout_create_order(*, shop_id: str, items: Sequence[dict], customer_profile_id: str | None = None) -> Order:
+def _validate_prepaid_misuse_guard(*, shop: Shop, settings_obj: ShopSettings | None, payment_method: str | None) -> None:
+    if payment_method != Order.PAYMENT_METHOD_PREPAID:
+        return
+
+    if not settings_obj or not getattr(settings_obj, "uses_platform_courier_credentials", False):
+        return
+
+    limit = int(getattr(settings_obj, "prepaid_misuse_consecutive_limit", 0) or 0)
+    if limit <= 0:
+        return
+
+    recent_methods = (
+        Order.objects.filter(shop=shop, deleted_at__isnull=True)
+        .order_by("-created_at")
+        .values_list("payment_method", flat=True)[:limit]
+    )
+
+    consecutive_prepaid = 0
+    for method in recent_methods:
+        if method == Order.PAYMENT_METHOD_PREPAID:
+            consecutive_prepaid += 1
+            continue
+        break
+
+    if consecutive_prepaid >= limit:
+        raise ValueError(
+            "Prepaid order creation is temporarily blocked due to consecutive prepaid activity while using platform courier credentials."
+        )
+
+
+def checkout_create_order(
+    *,
+    shop_id: str,
+    items: Sequence[dict],
+    customer_profile_id: str | None = None,
+    payment_method: str | None = None,
+) -> Order:
     shop = Shop.objects.get(id=shop_id, deleted_at__isnull=True)
     try:
         settings_obj = shop.settings
     except ShopSettings.DoesNotExist:
         settings_obj = None
+
+    normalized_payment_method = (payment_method or "").upper() or None
+    if normalized_payment_method not in {None, Order.PAYMENT_METHOD_COD, Order.PAYMENT_METHOD_PREPAID}:
+        raise ValueError("Unsupported payment method.")
+
+    _validate_prepaid_misuse_guard(
+        shop=shop,
+        settings_obj=settings_obj,
+        payment_method=normalized_payment_method,
+    )
+
     reservation_minutes = getattr(settings_obj, "stock_reservation_minutes", 30)
     expiry_at = reservation_expires_at(minutes=reservation_minutes)
     subtotal = Decimal("0.00")
@@ -44,6 +91,7 @@ def checkout_create_order(*, shop_id: str, items: Sequence[dict], customer_profi
             discount_amount=Decimal("0.00"),
             total_amount=Decimal("0.00"),
             currency=shop.base_currency,
+            payment_method=normalized_payment_method,
             lock_expires_at=expiry_at,
         )
 

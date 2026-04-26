@@ -24,7 +24,7 @@ from orders.services.partial_fulfillment import (
     partial_refund_create,
 )
 from orders.services.transitions import order_transition
-from shops.models import Shop
+from shops.models import Shop, ShopSettings
 
 
 class OrderCheckoutServiceTests(TestCase):
@@ -92,6 +92,55 @@ class OrderCheckoutServiceTests(TestCase):
                         "quantity": 6,
                     }
                 ],
+            )
+
+    def test_checkout_create_order_stores_payment_method(self):
+        order = checkout_create_order(
+            shop_id=str(self.shop.id),
+            items=[
+                {
+                    "product_id": str(self.product.id),
+                    "variant_id": str(self.variant.id),
+                    "quantity": 1,
+                }
+            ],
+            payment_method='PREPAID',
+        )
+
+        self.assertEqual(order.payment_method, 'PREPAID')
+
+    def test_prepaid_misuse_guard_blocks_after_limit(self):
+        ShopSettings.objects.create(
+            shop=self.shop,
+            tenant_id=self.shop.id,
+            uses_platform_courier_credentials=True,
+            prepaid_misuse_consecutive_limit=2,
+        )
+
+        for _ in range(2):
+            checkout_create_order(
+                shop_id=str(self.shop.id),
+                items=[
+                    {
+                        "product_id": str(self.product.id),
+                        "variant_id": str(self.variant.id),
+                        "quantity": 1,
+                    }
+                ],
+                payment_method='PREPAID',
+            )
+
+        with self.assertRaises(ValueError):
+            checkout_create_order(
+                shop_id=str(self.shop.id),
+                items=[
+                    {
+                        "product_id": str(self.product.id),
+                        "variant_id": str(self.variant.id),
+                        "quantity": 1,
+                    }
+                ],
+                payment_method='PREPAID',
             )
 
 

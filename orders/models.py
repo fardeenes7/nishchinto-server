@@ -20,6 +20,13 @@ class OrderStatus(models.TextChoices):
 
 
 class Order(TenantModel):
+    PAYMENT_METHOD_COD = 'COD'
+    PAYMENT_METHOD_PREPAID = 'PREPAID'
+    PAYMENT_METHOD_CHOICES = (
+        (PAYMENT_METHOD_COD, 'Cash on Delivery'),
+        (PAYMENT_METHOD_PREPAID, 'Prepaid / Online'),
+    )
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     shop = models.ForeignKey('shops.Shop', on_delete=models.CASCADE, related_name='orders')
     customer_profile = models.ForeignKey(
@@ -35,6 +42,7 @@ class Order(TenantModel):
     discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     currency = models.CharField(max_length=3, default='BDT')
+    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, null=True, blank=True)
     lock_expires_at = models.DateTimeField(null=True, blank=True)
 
     def save(self, *args, **kwargs):

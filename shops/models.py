@@ -107,6 +107,8 @@ class ShopSettings(TenantModel):
     stock_reservation_minutes = models.PositiveIntegerField(default=30)
     allow_guest_checkout = models.BooleanField(default=True)
     mandatory_advance_fee_bdt = models.PositiveIntegerField(default=0)
+    uses_platform_courier_credentials = models.BooleanField(default=False)
+    prepaid_misuse_consecutive_limit = models.PositiveSmallIntegerField(default=5)
     maintenance_mode = models.BooleanField(default=False)
     branding_slug_release_days = models.PositiveIntegerField(default=30)
 

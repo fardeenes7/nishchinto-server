@@ -372,7 +372,11 @@ def _confirm_order(
     }]
 
     try:
-        order = checkout_create_order(shop_id=shop_id, items=items)
+        order = checkout_create_order(
+            shop_id=shop_id,
+            items=items,
+            payment_method="COD" if payment_method == "COD" else "PREPAID",
+        )
     except ValueError as exc:
         return {"error": str(exc)}
 

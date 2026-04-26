@@ -49,5 +49,6 @@ urlpatterns = [
     path('api/v1/media/', include('media.api.urls')),
     path('api/v1/messenger/', include('messenger.api.urls')),
     path('api/v1/billing/', include('billing.api.urls')),
+    path('api/v1/accounting/', include('accounting.api.urls')),
     # path('api/v1/users/', include('users.api.urls')),
 ]
