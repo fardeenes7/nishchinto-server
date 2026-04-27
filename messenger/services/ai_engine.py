@@ -4,10 +4,13 @@ OpenAI Function-Calling Engine (EPIC C).
 Responsibilities:
   1. Load the conversation context (Redis hot path → Postgres fallback).
   2. Build the system prompt with shop identity + policies.
-  3. Run the OpenAI tool-call loop (max 5 function calls per turn).
+  3. Run the OpenAI tool-call loop (max 5 function calls per turn) via AIGateway.
   4. Persist the new messages to Redis cache + MessengerMessage table.
-  5. Deduct AI credits from ShopSettings.ai_credit_balance atomically.
+  5. Delegate credit deduction + AIUsageLog audit to AIGateway.log_accumulated_usage().
   6. Handle OpenAI failures with retry → fallback message → DLQ alert.
+
+Note: This module contains NO OpenAI client initialisation, model resolution, or
+credit math.  All of that is owned by core.services.ai_gateway.AIGateway.
 
 Scope note: online gateway finalization is v0.8; COD path is live from v0.6.
 """
@@ -15,17 +18,14 @@ from __future__ import annotations
 
 import json
 import logging
-from decimal import Decimal
 from typing import Any
 
-from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
-from openai import OpenAI, APIError, APIConnectionError, RateLimitError
 
 from core.models import AIModelUsage
-from core.services.ai_model_registry import resolve_ai_model
-from core.services.ai_credits import calculate_credits, deduct_ai_credits, has_sufficient_ai_credits
+from core.services.ai_credits import has_sufficient_ai_credits
+from core.services.ai_gateway import AIGateway
 from messenger.models import MessengerMessage, MessageDirection
 from messenger.selectors import message_list_for_psid
 from messenger.services.bot_state import ctx_cache_append, ctx_cache_get, ctx_cache_populate
@@ -33,8 +33,8 @@ from messenger.services.tools import TOOL_SCHEMAS, execute_tool
 
 logger = logging.getLogger(__name__)
 
-# Credits and Cost handled via core.services.ai_credits
-_MAX_TOOL_CALLS = 5          # global_business_rules_and_limits.md §5
+# Max consecutive function calls per AI turn (global_business_rules_and_limits.md §5)
+_MAX_TOOL_CALLS = 5
 
 
 # ---------------------------------------------------------------------------
@@ -156,14 +156,13 @@ def run_ai_turn(
         openai_messages.append({"role": m["role"], "content": m["content"]})
     openai_messages.append({"role": "user", "content": inbound_text})
 
-    # 3. Credit check
+    # 3. Credit pre-check
     if not has_sufficient_ai_credits(shop_id=shop_id):
         _handle_credit_exhaustion(shop_id=shop_id, page_id=page_id, psid=psid)
         return fallback_message or "I'm having a little trouble right now. Our team will reach out shortly! 🙏"
 
-    # 4. OpenAI tool-call loop
-    chat_model = resolve_ai_model(usage=AIModelUsage.CHAT_COMPLETION)
-    client = OpenAI(api_key=settings.OPENAI_API_KEY)
+    # 4. OpenAI tool-call loop — all AI concerns routed through AIGateway
+    gateway = AIGateway(shop_id=shop_id, reference_id=inbound_mid)
     total_input_tokens = 0
     total_output_tokens = 0
     tool_call_depth = 0
@@ -171,10 +170,10 @@ def run_ai_turn(
 
     try:
         while True:
-            response = _call_openai_with_retry(
-                client=client,
+            response = gateway.call_chat_with_tools(
                 messages=openai_messages,
-                model=chat_model.model_name,
+                tools=TOOL_SCHEMAS,
+                tool_choice="auto",
             )
             usage = response.usage
             if usage:
@@ -220,20 +219,15 @@ def run_ai_turn(
         _push_dlq_alert(shop_id=shop_id, reason=str(exc))
         return fallback_message or "I'm having a little trouble right now. Our team will reach out shortly! 🙏"
 
-    # 5. Deduct credits
-    input_rate = chat_model.input_price_per_1m_tokens or Decimal("0.15")
-    output_rate = chat_model.output_price_per_1m_tokens or Decimal("0.60")
-    credits = calculate_credits(
-        model_input_rate=input_rate,
-        model_output_rate=output_rate,
-        input_tokens=total_input_tokens,
-        output_tokens=total_output_tokens,
-    )
-    if credits > 0:
-        try:
-            deduct_ai_credits(shop_id=shop_id, credits=credits)
-        except Exception as exc:
-            logger.error("Credit deduction failed shop=%s: %s", shop_id, exc)
+    # 5. Deduct credits + write audit log via gateway (single consolidated entry)
+    try:
+        gateway.log_accumulated_usage(
+            usage_type=AIModelUsage.CHAT_COMPLETION,
+            total_input_tokens=total_input_tokens,
+            total_output_tokens=total_output_tokens,
+        )
+    except Exception as exc:
+        logger.error("Credit/audit logging failed shop=%s: %s", shop_id, exc)
 
     # 6. Persist outbound reply + update context cache
     out_mid = f"bot_{shop_id}_{psid}_{int(time.time() * 1000)}"
@@ -247,27 +241,6 @@ def run_ai_turn(
     ctx_cache_append(page_id=page_id, psid=psid, role="assistant", content=final_reply)
 
     return final_reply
-
-
-# ---------------------------------------------------------------------------
-# Retry + fallback helpers
-# ---------------------------------------------------------------------------
-
-def _call_openai_with_retry(*, client: OpenAI, messages: list, model: str, attempt: int = 0):
-    """1 retry with 2-second delay on 5xx / connection errors (v0.6 Step 9)."""
-    import time
-    try:
-        return client.chat.completions.create(
-            model=model,
-            messages=messages,
-            tools=TOOL_SCHEMAS,
-            tool_choice="auto",
-        )
-    except (APIError, APIConnectionError, RateLimitError) as exc:
-        if attempt == 0:
-            time.sleep(2)
-            return _call_openai_with_retry(client=client, messages=messages, model=model, attempt=1)
-        raise
 
 
 def _handle_credit_exhaustion(*, shop_id: str, page_id: str, psid: str) -> None:
